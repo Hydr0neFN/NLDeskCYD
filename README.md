@@ -62,7 +62,14 @@ these small dirty areas and cost 19 KB of heap, so it is off. What mattered
 was pacing: the sky advances from an `lv_timer` just before each refresh,
 motion is per second rather than per frame, and `LV_DEF_REFR_PERIOD` is 16 ms.
 For A/B tests, publish `secs:fps` to `cyd/nl/panel/bench` to run the sky at
-that rate (even at night, backlight untouched).
+that rate (even at night, backlight untouched); `secs:fps:full` also redraws
+the whole screen every frame. A full redraw of the home screen costs ~130 ms
+at 80 MHz SPI (~19 ms of it SPI; 34 ms at 40 MHz).
+
+The sky layers: rain streaks are as long as the distance they fall in ~60 ms
+and faster (nearer) drops are brighter; three cloud layers drift at different
+speeds and sizes for parallax; the moon shows its real phase, from the
+sun-moon elongation, as a sky-coloured disc clipped to the moon.
 
 Backlight: bright while touched, dim glance when idle by day (brighter while
 an alert is active), fully dark 00:30-07:30. A touch on a dim screen only

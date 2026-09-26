@@ -33,6 +33,7 @@ struct Model {
   // full rate even at night, backlight untouched. For remote A/B tests.
   uint32_t bench_until_ms = 0;
   int bench_fps = 20;
+  bool bench_full = false;
   int ota_percent = 0;
 };
 

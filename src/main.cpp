@@ -189,6 +189,7 @@ void loop() {
     bool bench = m.bench_until_ms && (long)(m.bench_until_ms - now) > 0;
     s_sky_fps = bench ? m.bench_fps : (ui_is_night() ? 0 : (is_active() ? SKY_FPS_ACTIVE : 4));
     sky_set_fps(s_sky_fps);
+    sky_set_full_redraw(bench && m.bench_full);
 
     bool active = is_active();
     if (was_active && !active) ui_go_home();  // idle always returns to the overview

@@ -84,11 +84,25 @@ static constexpr int SUN_D = 200, GLOW_D = 250, MOON_D = 180;
 static lv_timer_t *s_timer = nullptr;
 static void sky_frame(lv_timer_t *);
 static constexpr int N_DROPS = 28, N_STARS = 14, N_CLOUDS = 3, N_FOG = 3;
-static lv_obj_t *s_scr, *s_sun, *s_glow, *s_moon, *s_flash;
+static lv_obj_t *s_scr, *s_sun, *s_glow, *s_moon, *s_moon_shadow, *s_flash;
 static lv_obj_t *s_drops[N_DROPS], *s_stars[N_STARS], *s_clouds[N_CLOUDS], *s_fog[N_FOG];
 static int16_t s_dx[N_DROPS], s_dy[N_DROPS];  // px per 50 ms (tuned at 20 fps)
 static float s_fx[N_DROPS], s_fy[N_DROPS];
 static int16_t s_cloud_x[N_CLOUDS];
+
+// Parallax: far clouds are small, faint, high and slow; near ones big,
+// brighter, lower and faster. ms = time per 1 px of drift.
+struct CloudLayer {
+  int16_t y, w, h;
+  lv_opa_t opa;
+  uint16_t ms;
+};
+static const CloudLayer CLOUD_LAYERS[N_CLOUDS] = {
+    {14, 96, 30, LV_OPA_10, 320},   // far
+    {62, 140, 44, LV_OPA_20, 180},  // middle
+    {140, 196, 62, 64, 100},        // near (25 %)
+};
+static unsigned long s_cloud_last[N_CLOUDS];
 static int s_drop_count = 0;
 static bool s_snow = false, s_storm = false;
 static Group s_group = G_COUNT;
@@ -139,6 +153,16 @@ static AltAz sun_pos(float d) {
   return ecl_to_altaz(d, q + 1.915f * sinf(g) + 0.020f * sinf(2 * g), 0);
 }
 
+// Ecliptic longitudes, for the moon's phase (elongation = moon - sun).
+static float sun_lambda(float d) {
+  float g = wrap360(357.529f + 0.98560028f * d) * D2R;
+  return wrap360(280.459f + 0.98564736f * d + 1.915f * sinf(g) + 0.020f * sinf(2 * g));
+}
+static float moon_lambda(float d) {
+  float m = wrap360(134.963f + 13.064993f * d) * D2R;
+  return wrap360(218.316f + 13.176396f * d + 6.289f * sinf(m));
+}
+
 static AltAz moon_pos(float d) {
   float l0 = wrap360(218.316f + 13.176396f * d);
   float m = wrap360(134.963f + 13.064993f * d) * D2R;
@@ -176,6 +200,17 @@ static void update_bodies(bool force) {
   place(s_sun, sun, SUN_D, clear);
   place(s_glow, sun, GLOW_D, clear);
   place(s_moon, moon, MOON_D, clear);
+
+  // Phase: a sky-coloured disc slides across the moon. Illuminated fraction
+  // f = (1 - cos elongation) / 2; waxing (elongation < 180) is lit on the
+  // right as seen from the northern hemisphere, so the shadow sits left.
+  // Offsetting a same-size disc by f * D leaves ~f of the area lit (within a
+  // few percent), close enough for a 180 px moon.
+  float elong = wrap360(moon_lambda(d) - sun_lambda(d));
+  float f = (1 - cosf(elong * D2R)) / 2;
+  int dx = (int)lroundf(f * MOON_D);
+  lv_obj_set_x(s_moon_shadow, elong < 180 ? -dx : dx);
+  set_hidden(s_moon_shadow, f > 0.97f);
 }
 
 // Filled circle centred at (cx, cy) inside `parent`.
@@ -206,12 +241,19 @@ void sky_build(lv_obj_t *scr) {
   };
   for (auto &m : MARIA) disc(s_moon, MOON_D * m[0] / 100, MOON_D * m[1] / 100, MOON_D * m[2] / 100, 0xB9B6A9, LV_OPA_70);
   for (auto &c : CRATERS) disc(s_moon, MOON_D * c[0] / 100, MOON_D * c[1] / 100, MOON_D * c[2] / 100, 0xA19E92, LV_OPA_80);
+  // Phase shadow, last child so it covers the maria; clip_corner keeps it
+  // inside the moon's circle. Colour follows the sky (set in configure()).
+  s_moon_shadow = mk_box(s_moon, 0, 0, MOON_D, MOON_D, lv_color_hex(0x0B1530));
+  lv_obj_set_style_radius(s_moon_shadow, LV_RADIUS_CIRCLE, 0);
+  lv_obj_set_style_bg_opa(s_moon_shadow, LV_OPA_90, 0);
+  lv_obj_set_style_clip_corner(s_moon, true, 0);
   for (int i = 0; i < N_STARS; i++) {
     s_stars[i] = blob(random(0, 316), random(0, 150), 2, 2, 0xFFFFFF, LV_OPA_COVER);
   }
   for (int i = 0; i < N_CLOUDS; i++) {
-    s_cloud_x[i] = i * 120 - 20;
-    s_clouds[i] = blob(s_cloud_x[i], 8 + i * 58, 140, 48, 0xFFFFFF, LV_OPA_20);
+    const CloudLayer &L = CLOUD_LAYERS[i];
+    s_cloud_x[i] = i * 110 - 30;
+    s_clouds[i] = blob(s_cloud_x[i], L.y, L.w, L.h, 0xFFFFFF, L.opa);
   }
   for (int i = 0; i < N_FOG; i++) {
     s_fog[i] = mk_box(scr, i * 90 - 40, 56 + i * 62, 220, 18, lv_color_white());
@@ -235,12 +277,20 @@ void sky_build(lv_obj_t *scr) {
 static void respawn(int i, bool anywhere) {
   s_fx[i] = random(-10, 340);
   s_fy[i] = anywhere ? random(-20, 240) : random(-60, -10);
+  // Depth: a faster particle reads as nearer, so it is drawn bigger and
+  // brighter. Rain streaks are as long as the distance they fall in ~60 ms,
+  // which is what the eye sees as motion blur.
   if (s_snow) {
     s_dy[i] = random(1, 3);
     s_dx[i] = 0;
+    int d = s_dy[i] + 1;  // 2-3 px
+    lv_obj_set_size(s_drops[i], d, d);
+    lv_obj_set_style_bg_opa(s_drops[i], s_dy[i] > 1 ? LV_OPA_90 : LV_OPA_60, 0);
   } else {
-    s_dy[i] = s_group == G_POUR ? random(13, 17) : random(9, 12);
+    s_dy[i] = s_group == G_POUR ? random(12, 18) : random(8, 13);
     s_dx[i] = -2;
+    lv_obj_set_size(s_drops[i], 1, s_dy[i] + 3);
+    lv_obj_set_style_bg_opa(s_drops[i], s_dy[i] >= (s_group == G_POUR ? 15 : 11) ? LV_OPA_80 : LV_OPA_40, 0);
   }
 }
 
@@ -250,6 +300,8 @@ static void configure(Group g, Phase ph) {
   const uint32_t *c = SKY[g][ph];
   lv_obj_set_style_bg_color(s_scr, lv_color_hex(c[0]), 0);
   lv_obj_set_style_bg_grad_color(s_scr, lv_color_hex(c[1]), 0);
+  // The moon's dark side takes the sky's mid colour so it blends in.
+  lv_obj_set_style_bg_color(s_moon_shadow, lv_color_mix(lv_color_hex(c[0]), lv_color_hex(c[1]), 128), 0);
 
   bool night = ph == P_NIGHT;
   bool light_sky = g == G_CLEAR || g == G_PARTLY;
@@ -257,10 +309,13 @@ static void configure(Group g, Phase ph) {
   for (int i = 0; i < N_STARS; i++) set_hidden(s_stars[i], !(light_sky && night));
 
   int clouds = g == G_PARTLY ? 2 : (g == G_CLOUDY || g == G_POUR || g == G_STORM) ? 3 : (g == G_RAIN || g == G_SNOW) ? 2 : 0;
-  lv_opa_t copa = (g == G_RAIN || g == G_POUR || g == G_STORM) ? LV_OPA_10 : LV_OPA_20;
+  // Rain skies are already grey: halve the cloud opacity so they stay subtle.
+  bool wet = g == G_RAIN || g == G_POUR || g == G_STORM;
   for (int i = 0; i < N_CLOUDS; i++) {
-    set_hidden(s_clouds[i], i >= clouds);
-    lv_obj_set_style_bg_opa(s_clouds[i], copa, 0);
+    // Show the nearest layers first: with two clouds, the far one is dropped.
+    int layer = N_CLOUDS - 1 - i;
+    set_hidden(s_clouds[layer], i >= clouds);
+    lv_obj_set_style_bg_opa(s_clouds[layer], wet ? CLOUD_LAYERS[layer].opa / 2 : CLOUD_LAYERS[layer].opa, 0);
   }
   for (int i = 0; i < N_FOG; i++) set_hidden(s_fog[i], g != G_FOG);
 
@@ -270,10 +325,9 @@ static void configure(Group g, Phase ph) {
   for (int i = 0; i < N_DROPS; i++) {
     bool on = i < s_drop_count;
     if (on) {
-      respawn(i, true);
-      lv_obj_set_size(s_drops[i], s_snow ? 3 : 1, s_snow ? 3 : 10);
       lv_obj_set_style_radius(s_drops[i], s_snow ? 2 : 0, 0);
       lv_obj_set_style_bg_color(s_drops[i], s_snow ? lv_color_white() : lv_color_hex(0xC8D6E5), 0);
+      respawn(i, true);  // also sets size and opacity by depth
       lv_obj_set_pos(s_drops[i], (int)s_fx[i], (int)s_fy[i]);
     }
     set_hidden(s_drops[i], !on);
@@ -281,6 +335,9 @@ static void configure(Group g, Phase ph) {
   set_hidden(s_flash, true);
   s_next_flash = millis() + random(4000, 12000);
 }
+
+static bool s_full_redraw = false;
+void sky_set_full_redraw(bool on) { s_full_redraw = on; }
 
 void sky_set_fps(int fps) {
   if (fps == s_fps || !s_timer) return;
@@ -318,6 +375,7 @@ static void sky_frame(lv_timer_t *) {
   float k = min(now - last, 200UL) / 50.0f;
   last = now;
   s_frame++;
+  if (s_full_redraw) lv_obj_invalidate(s_scr);
 
   for (int i = 0; i < s_drop_count; i++) {
     s_fy[i] += s_dy[i] * k;
@@ -326,15 +384,19 @@ static void sky_frame(lv_timer_t *) {
     lv_obj_set_pos(s_drops[i], (int)s_fx[i], (int)s_fy[i]);
   }
 
-  // clouds and fog drift slowly: 1 px every 150 ms (7 px/s) at any frame rate
+  // clouds drift 1 px per layer interval (parallax), independent of frame rate
+  for (int i = 0; i < N_CLOUDS; i++) {
+    if (now - s_cloud_last[i] < CLOUD_LAYERS[i].ms) continue;
+    s_cloud_last[i] = now;
+    if (lv_obj_has_flag(s_clouds[i], LV_OBJ_FLAG_HIDDEN)) continue;
+    if (++s_cloud_x[i] > 330) s_cloud_x[i] = -CLOUD_LAYERS[i].w - 10;
+    lv_obj_set_x(s_clouds[i], s_cloud_x[i]);
+  }
+
+  // fog bands drift 1 px every 150 ms
   static unsigned long last_drift = 0;
   if (now - last_drift >= 150) {
     last_drift = now;
-    for (int i = 0; i < N_CLOUDS; i++) {
-      if (lv_obj_has_flag(s_clouds[i], LV_OBJ_FLAG_HIDDEN)) continue;
-      if (++s_cloud_x[i] > 330) s_cloud_x[i] = -150;
-      lv_obj_set_x(s_clouds[i], s_cloud_x[i]);
-    }
     if (s_group == G_FOG) {
       for (int i = 0; i < N_FOG; i++) {
         int x = lv_obj_get_x(s_fog[i]) + (i % 2 ? 1 : -1);

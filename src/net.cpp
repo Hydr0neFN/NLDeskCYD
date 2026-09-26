@@ -239,6 +239,9 @@ static void on_message(char *topic, uint8_t *payload, unsigned int len) {
     long secs = constrain(atol(b), 0L, 600L);
     const char *colon = strchr(b, ':');
     int fps = colon ? constrain(atoi(colon + 1), 1, 60) : 20;
+    // "secs:fps:full" also redraws the whole screen every frame (SPI A/B test)
+    bool full = colon && strchr(colon + 1, ':') && strstr(colon, "full");
+    s_model.bench_full = full;
     portENTER_CRITICAL(&s_mux);
     s_model.bench_until_ms = secs ? millis() + secs * 1000 : 0;
     s_model.bench_fps = fps;
