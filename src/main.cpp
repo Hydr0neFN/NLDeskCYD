@@ -82,10 +82,15 @@ static void my_touch_read_cb(lv_indev_t *, lv_indev_data_t *data) {
 }
 
 // --- Display inversion, persisted -------------------------------------------
-// The build flag TFT_INVERSION_ON is the proven default for this board; the
-// colour-check page can flip it at runtime and the choice survives reboots.
+// Default follows the driver's build flags; the colour-check page can flip it
+// at runtime and the choice survives reboots.
+#ifdef TFT_INVERSION_ON
+static constexpr bool DEFAULT_INVERTED = true;
+#else
+static constexpr bool DEFAULT_INVERTED = false;  // ST7789 on this board
+#endif
 static Preferences s_prefs;
-static bool s_inverted = true;
+static bool s_inverted = DEFAULT_INVERTED;
 
 void display_set_inverted(bool inverted) {
   s_inverted = inverted;
@@ -119,7 +124,7 @@ void setup() {
   tft.setRotation(1);  // proven unmirrored orientation for this board, matches touch
   tft.fillScreen(TFT_BLACK);
   s_prefs.begin("nldesk", false);
-  s_inverted = s_prefs.getBool("invert", true);
+  s_inverted = s_prefs.getBool("invert", DEFAULT_INVERTED);
   tft.invertDisplay(s_inverted);
 
   ledcSetup(BACKLIGHT_PWM_CH, BACKLIGHT_PWM_FREQ, BACKLIGHT_PWM_RES);

@@ -2,7 +2,7 @@
 
 [English](README.md)
 
-專為套房（one-room studio）設計的桌面儀表板，運行於 ESP32-2432S028「Cheap Yellow Display」（320x240 電阻式觸控螢幕）。為 [PCDeskCYD](https://github.com/Hydr0neFN/PCDeskCYD) 的姊妹專案：採用相同的開發板初始化設定（TFT_eSPI `ILI9341_2_DRIVER` + `TFT_INVERSION_ON`，觸控使用獨立的 VSPI 匯流排），但採用不同的 UI 與傳輸機制。
+專為套房（one-room studio）設計的桌面儀表板，運行於 ESP32-2432S028「Cheap Yellow Display」（320x240 電阻式觸控螢幕）。為 [PCDeskCYD](https://github.com/Hydr0neFN/PCDeskCYD) 的姊妹專案：採用相同的開發板初始化設定（觸控使用獨立的 VSPI 匯流排），但這塊 USB-C 版的面板以 **ST7789** 驅動（關閉反相、BGR 順序）：`ILI9341_2_DRIVER` 雖然能填滿整個面板，但寫入的 gamma 表錯誤，所有深色都會偏藍，但採用不同的 UI 與傳輸機制。
 
 ## 資料路徑
 

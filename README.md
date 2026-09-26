@@ -5,7 +5,9 @@
 Desk dashboard for a one-room studio, on an ESP32-2432S028 "Cheap Yellow
 Display" (320x240 resistive touch). Sibling of
 [PCDeskCYD](https://github.com/Hydr0neFN/PCDeskCYD): same board bring-up
-(TFT_eSPI `ILI9341_2_DRIVER` + `TFT_INVERSION_ON`, touch on its own VSPI bus),
+(touch on its own VSPI bus), but this USB-C board is driven as an **ST7789**
+(inversion off, BGR order): `ILI9341_2_DRIVER` fills the panel but writes the
+wrong gamma tables, which turns every dark colour blue,
 different UI and transport.
 
 ## Data path
