@@ -25,13 +25,29 @@ static constexpr int DRAW_BUF_LINES = 64;
 // LVGL 9 asserts on an unaligned draw buffer and halts in setup().
 static uint16_t draw_buf[320 * DRAW_BUF_LINES] __attribute__((aligned(4)));
 
+// --- Performance counters (published over MQTT by net.cpp) ------------------
+// frame = LVGL render start -> last flush of that refresh done; flush = time
+// spent inside flush_cb pushing pixels.
+static uint32_t s_render_start_us = 0, s_frames = 0, s_frame_us = 0, s_flush_us = 0;
+static int s_sky_fps = 0;
+
+static void on_render_start(lv_event_t *) { s_render_start_us = micros(); }
+
 static void my_flush_cb(lv_display_t *disp, const lv_area_t *area, uint8_t *px_map) {
+  uint32_t t0 = micros();
   uint32_t w = area->x2 - area->x1 + 1;
   uint32_t h = area->y2 - area->y1 + 1;
   tft.startWrite();
   tft.setAddrWindow(area->x1, area->y1, w, h);
   tft.pushColors(reinterpret_cast<uint16_t *>(px_map), w * h, true);
   tft.endWrite();
+
+  uint32_t t1 = micros();
+  s_flush_us += t1 - t0;
+  if (lv_display_flush_is_last(disp)) {
+    s_frames++;
+    s_frame_us += t1 - s_render_start_us;
+  }
   lv_display_flush_ready(disp);
 }
 
@@ -138,6 +154,7 @@ void setup() {
   lv_display_t *disp = lv_display_create(320, 240);
   lv_display_set_flush_cb(disp, my_flush_cb);
   lv_display_set_buffers(disp, draw_buf, NULL, sizeof(draw_buf), LV_DISPLAY_RENDER_MODE_PARTIAL);
+  lv_display_add_event_cb(disp, on_render_start, LV_EVENT_RENDER_START, nullptr);
 
   lv_indev_t *touch_indev = lv_indev_create();
   lv_indev_set_type(touch_indev, LV_INDEV_TYPE_POINTER);
@@ -148,10 +165,18 @@ void setup() {
 }
 
 void loop() {
-  static unsigned long last_refresh = 0;
+  static unsigned long last_refresh = 0, last_perf = 0;
   static bool was_active = true;
   static Model m;
   unsigned long now = millis();
+
+  if (now - last_perf >= 10000) {
+    float secs = (now - last_perf) / 1000.0f;
+    last_perf = now;
+    net_set_perf(s_frames / secs, s_frames ? s_frame_us / 1000.0f / s_frames : 0,
+                 s_frames ? s_flush_us / 1000.0f / s_frames : 0, s_sky_fps);
+    s_frames = s_frame_us = s_flush_us = 0;
+  }
 
   if (now - last_refresh >= 200) {
     last_refresh = now;
@@ -161,7 +186,9 @@ void loop() {
     // Sky animation follows the backlight: full rate in use, a slow drift in
     // the dim glance mode, a still sky at night (moving pixels in a dark
     // bedroom catch the eye).
-    sky_set_fps(ui_is_night() ? 0 : (is_active() ? 20 : 4));
+    bool bench = m.bench_until_ms && (long)(m.bench_until_ms - now) > 0;
+    s_sky_fps = bench ? m.bench_fps : (ui_is_night() ? 0 : (is_active() ? SKY_FPS_ACTIVE : 4));
+    sky_set_fps(s_sky_fps);
 
     bool active = is_active();
     if (was_active && !active) ui_go_home();  // idle always returns to the overview
@@ -175,7 +202,9 @@ void loop() {
     ledcWrite(BACKLIGHT_PWM_CH, s_bl_duty);
   }
 
-  sky_tick();
-  lv_timer_handler();
-  delay(5);
+  // The sky advances from its own lv_timer (ui_sky.cpp), so its frames land
+  // right before LVGL's refresh instead of drifting against a fixed delay.
+  // Sleep only until the next LVGL timer is due, at most 5 ms (touch polling).
+  uint32_t idle = lv_timer_handler();
+  delay(idle < 5 ? idle : 5);
 }

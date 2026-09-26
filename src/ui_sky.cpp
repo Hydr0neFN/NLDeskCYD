@@ -81,16 +81,19 @@ static constexpr float ALT_TOP = 65;                  // altitude drawn at y = T
 static constexpr int TOP_Y = 26, HORIZON_Y = 240;
 // A rising disc shows as a half circle about two cards wide and one card high.
 static constexpr int SUN_D = 200, GLOW_D = 250, MOON_D = 180;
+static lv_timer_t *s_timer = nullptr;
+static void sky_frame(lv_timer_t *);
 static constexpr int N_DROPS = 28, N_STARS = 14, N_CLOUDS = 3, N_FOG = 3;
 static lv_obj_t *s_scr, *s_sun, *s_glow, *s_moon, *s_flash;
 static lv_obj_t *s_drops[N_DROPS], *s_stars[N_STARS], *s_clouds[N_CLOUDS], *s_fog[N_FOG];
-static int16_t s_dx[N_DROPS], s_dy[N_DROPS], s_x[N_DROPS], s_y[N_DROPS];
+static int16_t s_dx[N_DROPS], s_dy[N_DROPS];  // px per 50 ms (tuned at 20 fps)
+static float s_fx[N_DROPS], s_fy[N_DROPS];
 static int16_t s_cloud_x[N_CLOUDS];
 static int s_drop_count = 0;
 static bool s_snow = false, s_storm = false;
 static Group s_group = G_COUNT;
 static Phase s_phase = P_DAY;
-static int s_fps = 20;
+static int s_fps = 0;  // timer starts paused; main.cpp sets the rate
 static uint32_t s_frame = 0;
 static unsigned long s_next_flash = 0, s_flash_off = 0;
 
@@ -224,11 +227,14 @@ void sky_build(lv_obj_t *scr) {
   s_flash = mk_box(scr, 0, 0, 320, 240, lv_color_hex(0xC8DCFF));
   lv_obj_set_style_bg_opa(s_flash, LV_OPA_30, 0);
   lv_obj_add_flag(s_flash, LV_OBJ_FLAG_HIDDEN);
+
+  s_timer = lv_timer_create(sky_frame, 50, nullptr);
+  lv_timer_pause(s_timer);
 }
 
 static void respawn(int i, bool anywhere) {
-  s_x[i] = random(-10, 340);
-  s_y[i] = anywhere ? random(-20, 240) : random(-60, -10);
+  s_fx[i] = random(-10, 340);
+  s_fy[i] = anywhere ? random(-20, 240) : random(-60, -10);
   if (s_snow) {
     s_dy[i] = random(1, 3);
     s_dx[i] = 0;
@@ -268,12 +274,24 @@ static void configure(Group g, Phase ph) {
       lv_obj_set_size(s_drops[i], s_snow ? 3 : 1, s_snow ? 3 : 10);
       lv_obj_set_style_radius(s_drops[i], s_snow ? 2 : 0, 0);
       lv_obj_set_style_bg_color(s_drops[i], s_snow ? lv_color_white() : lv_color_hex(0xC8D6E5), 0);
-      lv_obj_set_pos(s_drops[i], s_x[i], s_y[i]);
+      lv_obj_set_pos(s_drops[i], (int)s_fx[i], (int)s_fy[i]);
     }
     set_hidden(s_drops[i], !on);
   }
   set_hidden(s_flash, true);
   s_next_flash = millis() + random(4000, 12000);
+}
+
+void sky_set_fps(int fps) {
+  if (fps == s_fps || !s_timer) return;
+  s_fps = fps;
+  if (fps <= 0) {
+    lv_timer_pause(s_timer);
+    set_hidden(s_flash, true);
+  } else {
+    lv_timer_set_period(s_timer, 1000 / fps);
+    lv_timer_resume(s_timer);
+  }
 }
 
 void sky_update(const Model &m) {
@@ -284,29 +302,34 @@ void sky_update(const Model &m) {
   if (g != s_group || ph != s_phase) configure(g, ph);
 }
 
-void sky_set_fps(int fps) { s_fps = fps; }
-
-// Called from loop() every ~50 ms; advances one frame when due.
-void sky_tick() {
+// One animation frame. Driven by an lv_timer, so it runs inside
+// lv_timer_handler() just before LVGL's refresh and frames stay evenly paced.
+static void sky_frame(lv_timer_t *) {
   static unsigned long last = 0;
   unsigned long now = millis();
-  if (s_fps <= 0 || ui_page() != Page::HOME || s_group == G_COUNT) {
+  if (ui_page() != Page::HOME || s_group == G_COUNT) {
     set_hidden(s_flash, true);
+    last = now;
     return;
   }
-  if (now - last < (unsigned long)(1000 / s_fps)) return;
+  // Motion is per second, not per frame: speeds were tuned at 20 fps, so scale
+  // by the real elapsed time and the frame rate can change without the rain
+  // speeding up. Capped so a long stall does not teleport everything.
+  float k = min(now - last, 200UL) / 50.0f;
   last = now;
   s_frame++;
 
   for (int i = 0; i < s_drop_count; i++) {
-    s_y[i] += s_dy[i];
-    s_x[i] += s_snow ? (int)lroundf(sinf((s_frame + i * 7) * 0.15f)) : s_dx[i];
-    if (s_y[i] > 240 || s_x[i] < -12) respawn(i, false);
-    lv_obj_set_pos(s_drops[i], s_x[i], s_y[i]);
+    s_fy[i] += s_dy[i] * k;
+    s_fx[i] += s_snow ? sinf((now / 50.0f + i * 7) * 0.15f) * k : s_dx[i] * k;
+    if (s_fy[i] > 240 || s_fx[i] < -12) respawn(i, false);
+    lv_obj_set_pos(s_drops[i], (int)s_fx[i], (int)s_fy[i]);
   }
 
-  // clouds and fog drift slowly: 1 px every 3 frames
-  if (s_frame % 3 == 0) {
+  // clouds and fog drift slowly: 1 px every 150 ms (7 px/s) at any frame rate
+  static unsigned long last_drift = 0;
+  if (now - last_drift >= 150) {
+    last_drift = now;
     for (int i = 0; i < N_CLOUDS; i++) {
       if (lv_obj_has_flag(s_clouds[i], LV_OBJ_FLAG_HIDDEN)) continue;
       if (++s_cloud_x[i] > 330) s_cloud_x[i] = -150;

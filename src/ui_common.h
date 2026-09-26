@@ -109,7 +109,7 @@ void basil_refresh(const Model &m, bool live);
 void sky_build(lv_obj_t *scr);       // call first, so the layers sit under everything
 void sky_update(const Model &m);     // reconfigures when condition or sun phase changes
 void sky_set_fps(int fps);           // 0 = still sky
-void sky_tick();                     // call from loop(); advances a frame when due
+// (frames are driven by an internal lv_timer)
 const char *sky_label(const char *ha_cond);  // "partlycloudy" -> "晴時多雲"
 
 lv_obj_t *swatch_build();

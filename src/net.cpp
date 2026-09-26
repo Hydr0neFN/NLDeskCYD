@@ -230,6 +230,22 @@ static void on_message(char *topic, uint8_t *payload, unsigned int len) {
   if (strncmp(topic, TOPIC_BASE, BASE_LEN) != 0) return;
   const char *suffix = topic + BASE_LEN;
 
+  if (strcmp(suffix, "panel/bench") == 0) {
+    char b[12];
+    size_t n = len < sizeof(b) - 1 ? len : sizeof(b) - 1;
+    memcpy(b, payload, n);
+    b[n] = '\0';
+    // "secs" or "secs:fps"
+    long secs = constrain(atol(b), 0L, 600L);
+    const char *colon = strchr(b, ':');
+    int fps = colon ? constrain(atoi(colon + 1), 1, 60) : 20;
+    portENTER_CRITICAL(&s_mux);
+    s_model.bench_until_ms = secs ? millis() + secs * 1000 : 0;
+    s_model.bench_fps = fps;
+    portEXIT_CRITICAL(&s_mux);
+    return;
+  }
+
   if (strcmp(suffix, "weather") == 0) {
     char w[256];
     if (len >= sizeof(w)) return;
@@ -313,6 +329,7 @@ static bool mqtt_connect() {
   }
   s_mqtt.subscribe(TOPIC_BASE "hist/+", 1);
   s_mqtt.subscribe(TOPIC_BASE "weather", 1);
+  s_mqtt.subscribe(TOPIC_PANEL "bench", 0);
   return true;
 }
 
@@ -346,6 +363,18 @@ static void setup_ota() {
   ArduinoOTA.begin();
 }
 
+static float s_perf_fps = 0, s_perf_frame_ms = 0, s_perf_flush_ms = 0;
+static int s_perf_sky = 0;
+
+void net_set_perf(float fps, float frame_ms, float flush_ms, int sky_fps) {
+  portENTER_CRITICAL(&s_mux);
+  s_perf_fps = fps;
+  s_perf_frame_ms = frame_ms;
+  s_perf_flush_ms = flush_ms;
+  s_perf_sky = sky_fps;
+  portEXIT_CRITICAL(&s_mux);
+}
+
 static void drop_queued_commands() {
   Cmd c;
   while (xQueueReceive(s_cmd_queue, &c, 0) == pdTRUE) {
@@ -368,7 +397,7 @@ static void net_task(void *) {
   s_mqtt.setKeepAlive(30);
 
   bool ota_started = false;
-  unsigned long next_try = 0, next_rssi = 0;
+  unsigned long next_try = 0, next_rssi = 0, next_perf = 0;
 
   for (;;) {
     unsigned long now = millis();
@@ -394,6 +423,18 @@ static void net_task(void *) {
           const char *t = c.target == CmdTarget::BASIL ? TOPIC_CMD_BASIL : TOPIC_CMD_LIGHTBAR;
           Serial.printf("[MQTT] %s %s\n", t, c.json);
           s_mqtt.publish(t, c.json, false);
+        }
+        if ((long)(now - next_perf) >= 0) {
+          next_perf = now + 10000;
+          char p[128];
+          portENTER_CRITICAL(&s_mux);
+          snprintf(p, sizeof(p), "{\"fps\":%.1f,\"frame_ms\":%.1f,\"flush_ms\":%.1f,\"sky_fps\":%d,\"heap\":%u}",
+                   s_perf_fps, s_perf_frame_ms, s_perf_flush_ms, s_perf_sky, 0u);
+          portEXIT_CRITICAL(&s_mux);
+          // heap read outside the critical section
+          char *h = strstr(p, "\"heap\":0}");
+          if (h) snprintf(h, sizeof(p) - (h - p), "\"heap\":%u}", ESP.getFreeHeap());
+          s_mqtt.publish(TOPIC_PANEL "perf", p, false);
         }
         if ((long)(now - next_rssi) >= 0) {
           next_rssi = now + 60000;

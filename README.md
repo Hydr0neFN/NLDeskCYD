@@ -51,8 +51,18 @@ low-precision ephemeris for the home location (`HOME_LAT` / `HOME_LON` in
 right, altitude onto height with the horizon at the bottom edge, so a rising
 body appears as a large half circle at the bottom-left and sets at the
 bottom-right. They are drawn only for a clear or partly cloudy sky. The
-animation runs at 20 fps in use, 4 fps in the dim glance mode and stops at
+animation runs at 30 fps in use, 4 fps in the dim glance mode and stops at
 night.
+
+Measured on the panel (`cyd/nl/panel/perf`, 2026-09-27): about 8 ms per frame
+at 30 fps, of which under 1 ms is SPI, so the bus is not the limit and DMA or
+an 80 MHz SPI clock would buy almost nothing. Spreading LVGL's software
+renderer over both cores (`LV_OS_FREERTOS`, 2 draw units) made it slower on
+these small dirty areas and cost 19 KB of heap, so it is off. What mattered
+was pacing: the sky advances from an `lv_timer` just before each refresh,
+motion is per second rather than per frame, and `LV_DEF_REFR_PERIOD` is 16 ms.
+For A/B tests, publish `secs:fps` to `cyd/nl/panel/bench` to run the sky at
+that rate (even at night, backlight untouched).
 
 Backlight: bright while touched, dim glance when idle by day (brighter while
 an alert is active), fully dark 00:30-07:30. A touch on a dim screen only

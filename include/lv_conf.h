@@ -7,6 +7,10 @@
 #define LV_USE_STDLIB_STRING LV_STDLIB_CLIB
 #define LV_USE_STDLIB_SPRINTF LV_STDLIB_CLIB
 
+/* No OS layer. Tried LV_OS_FREERTOS with 2 SW draw units (one per core) on
+ * 2026-09-27: the sky's small per-frame dirty areas got SLOWER (7.3 -> 11-13
+ * ms per frame, 36 -> 33 fps at a 40 fps target) and the draw-thread stacks
+ * cost 19 KB of heap. Parallel drawing only pays off on full-screen redraws. */
 #define LV_USE_OS LV_OS_NONE
 
 #define LV_USE_LOG 1
@@ -21,6 +25,10 @@
 #define LV_DPI_DEF 130
 
 #define LV_DRAW_BUF_ALIGN 4
+
+/* Refresh period (ms). LVGL's default of 33 caps everything at 30 fps; the
+ * home sky measured ~15 ms per frame, so 16 lets it run at 30-40 fps. */
+#define LV_DEF_REFR_PERIOD 16
 
 /* Widgets used in this project */
 #define LV_USE_BUTTON 1

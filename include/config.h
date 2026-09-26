@@ -37,6 +37,10 @@
 #define BL_NIGHT_IDLE 0    // night: fully dark, alerts do not wake it
 #define IDLE_TIMEOUT_MS 30000
 
+// Home sky frame rate while the panel is in use (see README: measured ~15 ms
+// per frame, so the limit is LVGL rendering, not the SPI bus).
+#define SKY_FPS_ACTIVE 30
+
 // Thresholds.
 #define CO2_WARN 800
 #define CO2_ALERT 1200

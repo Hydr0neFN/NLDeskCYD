@@ -29,6 +29,10 @@ struct Model {
   bool mqtt_connected = false;
   uint32_t last_msg_ms = 0;  // millis() of the last message on any topic
   bool ota_active = false;
+  // Benchmark window (cyd/nl/panel/bench, payload = seconds): the sky runs at
+  // full rate even at night, backlight untouched. For remote A/B tests.
+  uint32_t bench_until_ms = 0;
+  int bench_fps = 20;
   int ota_percent = 0;
 };
 
@@ -62,3 +66,7 @@ enum class CmdTarget : uint8_t { LIGHTBAR, BASIL };
 // and cyd_nl_basil_command. Safe from core 1. Dropped while MQTT is down, so a
 // reconnect never replays stale taps.
 void net_send(CmdTarget t, const char *json);
+
+// Display performance, published to cyd/nl/panel/perf every 10 s for A/B
+// testing display changes. Safe from core 1.
+void net_set_perf(float fps, float frame_ms, float flush_ms, int sky_fps);
