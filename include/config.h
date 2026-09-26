@@ -15,6 +15,11 @@
 // Our own availability (LWT) and diagnostics.
 #define TOPIC_PANEL "cyd/nl/panel/"
 
+// Home location, rounded to ~10 km (city level): only used to place the sun and moon on
+// the sky background.
+#define HOME_LAT 53.2
+#define HOME_LON 6.6
+
 #define TZ_INFO "CET-1CEST,M3.5.0,M10.5.0/3"
 #define NTP_SERVER_1 "pool.ntp.org"
 #define NTP_SERVER_2 "time.google.com"

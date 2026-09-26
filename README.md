@@ -1,5 +1,7 @@
 # NLDeskCYD
 
+[繁體中文](README.zh-TW.md)
+
 Desk dashboard for a one-room studio, on an ESP32-2432S028 "Cheap Yellow
 Display" (320x240 resistive touch). Sibling of
 [PCDeskCYD](https://github.com/Hydr0neFN/PCDeskCYD): same board bring-up
@@ -35,6 +37,20 @@ statistics tables read-only.
 | Power  | power card           | 24 h house vs PC W, 7-day kWh bars |
 | Basil  | basil card           | 48 h soil / tank chart, plant light, two-tap water / clear fault |
 | Colour | long-press the clock | palette swatches + display inversion toggle (persisted) |
+
+## Sky background
+
+The home screen sits on an animated sky built from the same condition groups
+and gradient table as the user's projector wake page: day / dusk / night
+gradients, drifting clouds, rain, snow, fog bands and a faint lightning flash.
+The sun and moon follow their real path, computed on the device with a
+low-precision ephemeris for the home location (`HOME_LAT` / `HOME_LON` in
+`include/config.h`, rounded to city level): azimuth maps east to west onto left to
+right, altitude onto height with the horizon at the bottom edge, so a rising
+body appears as a large half circle at the bottom-left and sets at the
+bottom-right. They are drawn only for a clear or partly cloudy sky. The
+animation runs at 20 fps in use, 4 fps in the dim glance mode and stops at
+night.
 
 Backlight: bright while touched, dim glance when idle by day (brighter while
 an alert is active), fully dark 00:30-07:30. A touch on a dim screen only

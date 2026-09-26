@@ -16,6 +16,9 @@
 #include <Arduino.h>
 #include <math.h>
 
+#include <time.h>
+
+#include "config.h"
 #include "ui_common.h"
 
 enum Group : uint8_t { G_CLEAR, G_PARTLY, G_CLOUDY, G_RAIN, G_POUR, G_STORM, G_SNOW, G_FOG, G_COUNT };
@@ -70,7 +73,14 @@ static Phase phase_of(float elev) {
 }
 
 // --- Objects ----------------------------------------------------------------------
-static constexpr int SUN_X = 184, SUN_Y = 8, SUN_D = 20;
+// Sun and moon travel their real path: x from azimuth (east = left, west =
+// right), y from altitude with the horizon at the bottom edge, so a rising
+// body first shows as a half circle at the bottom-left and sets bottom-right.
+static constexpr float AZ_LEFT = 60, AZ_RIGHT = 300;  // degrees, clamped
+static constexpr float ALT_TOP = 65;                  // altitude drawn at y = TOP_Y
+static constexpr int TOP_Y = 26, HORIZON_Y = 240;
+// A rising disc shows as a half circle about two cards wide and one card high.
+static constexpr int SUN_D = 200, GLOW_D = 250, MOON_D = 180;
 static constexpr int N_DROPS = 28, N_STARS = 14, N_CLOUDS = 3, N_FOG = 3;
 static lv_obj_t *s_scr, *s_sun, *s_glow, *s_moon, *s_flash;
 static lv_obj_t *s_drops[N_DROPS], *s_stars[N_STARS], *s_clouds[N_CLOUDS], *s_fog[N_FOG];
@@ -92,15 +102,86 @@ static lv_obj_t *blob(int x, int y, int w, int h, uint32_t rgb, lv_opa_t opa) {
   return o;
 }
 
+// --- Low-precision ephemeris (~1 degree; plenty for a 320 px sky) --------------
+static constexpr float D2R = 0.01745329252f;
+
+struct AltAz {
+  float alt, az;  // degrees; az from north through east
+};
+
+static float wrap360(float x) {
+  x = fmodf(x, 360.0f);
+  return x < 0 ? x + 360.0f : x;
+}
+
+// Ecliptic longitude/latitude -> horizontal coordinates at days-since-J2000 d.
+static AltAz ecl_to_altaz(float d, float lambda, float beta) {
+  float eps = (23.439f - 0.0000004f * d) * D2R;
+  float l = lambda * D2R, b = beta * D2R;
+  float ra = atan2f(cosf(eps) * sinf(l) - tanf(b) * sinf(eps), cosf(l));
+  float dec = asinf(sinf(b) * cosf(eps) + cosf(b) * sinf(eps) * sinf(l));
+  float lst = wrap360(280.46061837f + 360.98564736629f * d + HOME_LON) * D2R;
+  float ha = lst - ra;
+  float lat = HOME_LAT * D2R;
+  float alt = asinf(sinf(lat) * sinf(dec) + cosf(lat) * cosf(dec) * cosf(ha));
+  float az = atan2f(-sinf(ha), tanf(dec) * cosf(lat) - sinf(lat) * cosf(ha));
+  return {alt / D2R, wrap360(az / D2R)};
+}
+
+static float days_j2000(time_t t) { return (float)((double)(t - 946728000L) / 86400.0); }
+
+static AltAz sun_pos(float d) {
+  float g = wrap360(357.529f + 0.98560028f * d) * D2R;
+  float q = wrap360(280.459f + 0.98564736f * d);
+  return ecl_to_altaz(d, q + 1.915f * sinf(g) + 0.020f * sinf(2 * g), 0);
+}
+
+static AltAz moon_pos(float d) {
+  float l0 = wrap360(218.316f + 13.176396f * d);
+  float m = wrap360(134.963f + 13.064993f * d) * D2R;
+  float f = wrap360(93.272f + 13.229350f * d) * D2R;
+  return ecl_to_altaz(d, l0 + 6.289f * sinf(m), 5.128f * sinf(f));
+}
+
+// Places a disc of diameter dia for body position p; hides it once it is
+// fully below the horizon line.
+static bool place(lv_obj_t *o, AltAz p, int dia, bool allowed) {
+  float fx = (p.az - AZ_LEFT) / (AZ_RIGHT - AZ_LEFT);
+  int cx = (int)lroundf(constrain(fx, 0.0f, 1.0f) * 320);
+  int cy = HORIZON_Y - (int)lroundf(p.alt / ALT_TOP * (HORIZON_Y - TOP_Y));
+  bool show = allowed && cy - dia / 2 < HORIZON_Y;
+  if (show) lv_obj_set_pos(o, cx - dia / 2, cy - dia / 2);
+  set_hidden(o, !show);
+  return show;
+}
+
+static float s_sun_alt = NAN;
+static unsigned long s_next_astro = 0;
+
+// Recomputes sun and moon positions (every 30 s; they move ~0.1 deg in that time).
+static void update_bodies(bool force) {
+  unsigned long now = millis();
+  if (!force && (long)(now - s_next_astro) < 0) return;
+  s_next_astro = now + 30000;
+  time_t t = time(nullptr);
+  if (t < 1700000000) return;  // SNTP not synced yet
+  float d = days_j2000(t);
+  AltAz sun = sun_pos(d), moon = moon_pos(d);
+  s_sun_alt = sun.alt;
+  // Only a clear or partly cloudy sky shows its sun and moon.
+  bool clear = s_group == G_CLEAR || s_group == G_PARTLY;
+  place(s_sun, sun, SUN_D, clear);
+  place(s_glow, sun, GLOW_D, clear);
+  place(s_moon, moon, MOON_D, clear);
+}
+
 void sky_build(lv_obj_t *scr) {
   s_scr = scr;
   lv_obj_set_style_bg_grad_dir(scr, LV_GRAD_DIR_VER, 0);
 
-  // Sun and moon sit in the header gap between the date and the outdoor
-  // weather text (x ~182-200); anywhere under text makes the text unreadable.
-  s_glow = blob(SUN_X - 20, SUN_Y - 20, SUN_D + 40, SUN_D + 40, 0xFFD27A, LV_OPA_20);
-  s_sun = blob(SUN_X, SUN_Y, SUN_D, SUN_D, 0xFFD27A, LV_OPA_COVER);
-  s_moon = blob(SUN_X + 2, SUN_Y + 2, SUN_D - 4, SUN_D - 4, 0xE8E6D9, LV_OPA_90);
+  s_glow = blob(0, 0, GLOW_D, GLOW_D, 0xFFD27A, LV_OPA_10);
+  s_sun = blob(0, 0, SUN_D, SUN_D, 0xFFD27A, LV_OPA_COVER);
+  s_moon = blob(0, 0, MOON_D, MOON_D, 0xE8E6D9, LV_OPA_90);
   for (int i = 0; i < N_STARS; i++) {
     s_stars[i] = blob(random(0, 316), random(0, 150), 2, 2, 0xFFFFFF, LV_OPA_COVER);
   }
@@ -145,9 +226,7 @@ static void configure(Group g, Phase ph) {
 
   bool night = ph == P_NIGHT;
   bool light_sky = g == G_CLEAR || g == G_PARTLY;
-  set_hidden(s_sun, !(light_sky && !night));
-  set_hidden(s_glow, !(light_sky && !night));
-  set_hidden(s_moon, !(light_sky && night));
+  update_bodies(true);
   for (int i = 0; i < N_STARS; i++) set_hidden(s_stars[i], !(light_sky && night));
 
   int clouds = g == G_PARTLY ? 2 : (g == G_CLOUDY || g == G_POUR || g == G_STORM) ? 3 : (g == G_RAIN || g == G_SNOW) ? 2 : 0;
@@ -178,7 +257,8 @@ static void configure(Group g, Phase ph) {
 
 void sky_update(const Model &m) {
   Group g = m.wx_cond[0] ? group_of(m.wx_cond) : G_CLOUDY;
-  Phase ph = phase_of(m.sun_elev);
+  update_bodies(false);
+  Phase ph = phase_of(isnan(s_sun_alt) ? m.sun_elev : s_sun_alt);
   if (!strcmp(m.wx_cond, "clear-night")) ph = P_NIGHT;
   if (g != s_group || ph != s_phase) configure(g, ph);
 }
