@@ -167,6 +167,11 @@ void setup() {
   lv_indev_set_read_cb(touch_indev, my_touch_read_cb);
 
   ui_init();
+  // Reboot if loop() stalls for more than the task-WDT timeout (5 s): an LVGL
+  // assert or a hang must not leave a frozen, normal-looking screen behind
+  // (2026-09-27: the UI froze for hours while the network task kept
+  // publishing stale telemetry).
+  enableLoopWDT();
   Serial.printf("Free heap: %u bytes\n", ESP.getFreeHeap());
 }
 

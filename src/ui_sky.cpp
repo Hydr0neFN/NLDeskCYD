@@ -241,12 +241,16 @@ void sky_build(lv_obj_t *scr) {
   };
   for (auto &m : MARIA) disc(s_moon, MOON_D * m[0] / 100, MOON_D * m[1] / 100, MOON_D * m[2] / 100, 0xB9B6A9, LV_OPA_70);
   for (auto &c : CRATERS) disc(s_moon, MOON_D * c[0] / 100, MOON_D * c[1] / 100, MOON_D * c[2] / 100, 0xA19E92, LV_OPA_80);
-  // Phase shadow, last child so it covers the maria; clip_corner keeps it
-  // inside the moon's circle. Colour follows the sky (set in configure()).
+  // Phase shadow, last child so it covers the maria. Its colour follows the
+  // sky (set in configure()), so the part that spills past the moon's edge
+  // (children are clipped to the moon's bounding box, not its circle) blends
+  // into the sky. Do NOT use clip_corner on the moon: it renders the 180 px
+  // disc through a temporary layer (64-130 KB) that does not fit in the free
+  // heap, and the failed allocation trips LV_ASSERT_MALLOC -- an endless
+  // loop that froze the UI on 2026-09-27.
   s_moon_shadow = mk_box(s_moon, 0, 0, MOON_D, MOON_D, lv_color_hex(0x0B1530));
   lv_obj_set_style_radius(s_moon_shadow, LV_RADIUS_CIRCLE, 0);
   lv_obj_set_style_bg_opa(s_moon_shadow, LV_OPA_90, 0);
-  lv_obj_set_style_clip_corner(s_moon, true, 0);
   for (int i = 0; i < N_STARS; i++) {
     s_stars[i] = blob(random(0, 316), random(0, 150), 2, 2, 0xFFFFFF, LV_OPA_COVER);
   }
