@@ -70,6 +70,7 @@ static Phase phase_of(float elev) {
 }
 
 // --- Objects ----------------------------------------------------------------------
+static constexpr int SUN_X = 184, SUN_Y = 8, SUN_D = 20;
 static constexpr int N_DROPS = 28, N_STARS = 14, N_CLOUDS = 3, N_FOG = 3;
 static lv_obj_t *s_scr, *s_sun, *s_glow, *s_moon, *s_flash;
 static lv_obj_t *s_drops[N_DROPS], *s_stars[N_STARS], *s_clouds[N_CLOUDS], *s_fog[N_FOG];
@@ -95,9 +96,11 @@ void sky_build(lv_obj_t *scr) {
   s_scr = scr;
   lv_obj_set_style_bg_grad_dir(scr, LV_GRAD_DIR_VER, 0);
 
-  s_glow = blob(226, -52, 124, 124, 0xFFD27A, LV_OPA_20);
-  s_sun = blob(254, -24, 68, 68, 0xFFD27A, LV_OPA_COVER);
-  s_moon = blob(272, 2, 30, 30, 0xE8E6D9, LV_OPA_90);
+  // Sun and moon sit in the header gap between the date and the outdoor
+  // weather text (x ~182-200); anywhere under text makes the text unreadable.
+  s_glow = blob(SUN_X - 20, SUN_Y - 20, SUN_D + 40, SUN_D + 40, 0xFFD27A, LV_OPA_20);
+  s_sun = blob(SUN_X, SUN_Y, SUN_D, SUN_D, 0xFFD27A, LV_OPA_COVER);
+  s_moon = blob(SUN_X + 2, SUN_Y + 2, SUN_D - 4, SUN_D - 4, 0xE8E6D9, LV_OPA_90);
   for (int i = 0; i < N_STARS; i++) {
     s_stars[i] = blob(random(0, 316), random(0, 150), 2, 2, 0xFFFFFF, LV_OPA_COVER);
   }
@@ -146,13 +149,6 @@ static void configure(Group g, Phase ph) {
   set_hidden(s_glow, !(light_sky && !night));
   set_hidden(s_moon, !(light_sky && night));
   for (int i = 0; i < N_STARS; i++) set_hidden(s_stars[i], !(light_sky && night));
-  if (g == G_PARTLY) {  // smaller sun behind a cloud
-    lv_obj_set_size(s_sun, 48, 48);
-    lv_obj_set_pos(s_sun, 262, -14);
-  } else {
-    lv_obj_set_size(s_sun, 68, 68);
-    lv_obj_set_pos(s_sun, 254, -24);
-  }
 
   int clouds = g == G_PARTLY ? 2 : (g == G_CLOUDY || g == G_POUR || g == G_STORM) ? 3 : (g == G_RAIN || g == G_SNOW) ? 2 : 0;
   lv_opa_t copa = (g == G_RAIN || g == G_POUR || g == G_STORM) ? LV_OPA_10 : LV_OPA_20;
