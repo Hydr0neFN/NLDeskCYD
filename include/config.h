@@ -30,11 +30,10 @@
 #define NIGHT_END_MIN (7 * 60 + 30)
 
 // Backlight duty (0-255) per mode.
-#define BL_DAY_ACTIVE 220
+#define BL_ACTIVE 255      // touched, day or night (user's choice 2026-09-27)
 #define BL_DAY_GLANCE 22   // idle during the day: dim glance mode
 #define BL_DAY_ALERT 100   // idle during the day with an alert pending
-#define BL_NIGHT_ACTIVE 45 // touched at night
-#define BL_NIGHT_IDLE 0    // night: fully dark, alerts do not wake it
+#define BL_NIGHT_IDLE 0    // night: off until touched; alerts do not wake it
 #define IDLE_TIMEOUT_MS 30000
 
 // Home sky frame rate while the panel is in use (see README: measured ~15 ms

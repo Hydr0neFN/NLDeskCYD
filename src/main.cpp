@@ -63,7 +63,8 @@ static constexpr int RAMP_STEP = 6;
 static unsigned long s_last_touch_ms = 0;
 static unsigned long s_last_ramp_ms = 0;
 static int s_bl_duty = 0;
-static int s_bl_target = BL_DAY_ACTIVE;
+static int s_bl_target = BL_ACTIVE;
+static bool s_touched = false;  // any real touch since boot
 
 // A touch that lands on a dark or dimmed screen only wakes it: the press is
 // swallowed until the finger has been lifted for RELEASE_DEBOUNCE_MS, so
@@ -79,8 +80,11 @@ static bool is_active() { return millis() - s_last_touch_ms < IDLE_TIMEOUT_MS; }
 static void my_touch_read_cb(lv_indev_t *, lv_indev_data_t *data) {
   if (touchscreen.tirqTouched() && touchscreen.touched()) {
     s_release_start = 0;
-    if (!is_active()) s_swallow = true;
+    // Swallow the touch that wakes a dark or dimmed screen -- judged by the
+    // actual backlight, so it also covers a freshly booted panel at night.
+    if (!is_active() || s_bl_duty < BL_ACTIVE / 2) s_swallow = true;
     s_last_touch_ms = millis();
+    s_touched = true;
     if (s_swallow) {
       data->state = LV_INDEV_STATE_RELEASED;
       return;
@@ -118,8 +122,10 @@ bool display_is_inverted() { return s_inverted; }
 
 static int backlight_target(const Model &m) {
   bool night = ui_is_night();
-  if (m.ota_active) return night ? BL_NIGHT_ACTIVE : BL_DAY_ACTIVE;
-  if (is_active()) return night ? BL_NIGHT_ACTIVE : BL_DAY_ACTIVE;
+  if (m.ota_active) return night ? BL_NIGHT_IDLE : BL_ACTIVE;
+  // Boot counts as activity by day (the panel shows it is alive) but not at
+  // night: a reboot must not light the bedroom. A real touch lights it fully.
+  if (is_active() && (s_touched || !night)) return BL_ACTIVE;
   // Sleep beats the plant: alerts never light the screen at night.
   if (night) return BL_NIGHT_IDLE;
   return ui_has_alert(m) ? BL_DAY_ALERT : BL_DAY_GLANCE;
