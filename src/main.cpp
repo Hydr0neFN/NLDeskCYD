@@ -8,6 +8,7 @@
 #include "config.h"
 #include "net.h"
 #include "ui.h"
+#include "ui_common.h"
 
 // CYD touch uses non-default SPI pins, on a separate bus from the display.
 #define XPT2046_IRQ 36
@@ -152,6 +153,10 @@ void loop() {
     net_snapshot(m);
     ui_refresh(m);
     s_bl_target = backlight_target(m);
+    // Sky animation follows the backlight: full rate in use, a slow drift in
+    // the dim glance mode, a still sky at night (moving pixels in a dark
+    // bedroom catch the eye).
+    sky_set_fps(ui_is_night() ? 0 : (is_active() ? 20 : 4));
 
     bool active = is_active();
     if (was_active && !active) ui_go_home();  // idle always returns to the overview
@@ -165,6 +170,7 @@ void loop() {
     ledcWrite(BACKLIGHT_PWM_CH, s_bl_duty);
   }
 
+  sky_tick();
   lv_timer_handler();
   delay(5);
 }

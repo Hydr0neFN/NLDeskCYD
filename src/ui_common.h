@@ -105,5 +105,12 @@ void power_refresh(const Model &m, bool live);
 lv_obj_t *basil_build();
 void basil_refresh(const Model &m, bool live);
 
+// Animated weather sky behind the home screen (ui_sky.cpp).
+void sky_build(lv_obj_t *scr);       // call first, so the layers sit under everything
+void sky_update(const Model &m);     // reconfigures when condition or sun phase changes
+void sky_set_fps(int fps);           // 0 = still sky
+void sky_tick();                     // call from loop(); advances a frame when due
+const char *sky_label(const char *ha_cond);  // "partlycloudy" -> "晴時多雲"
+
 lv_obj_t *swatch_build();
 void swatch_refresh();

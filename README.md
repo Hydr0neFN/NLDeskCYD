@@ -12,6 +12,7 @@ different UI and transport.
 [Home Assistant on nl-pi]
   mqtt_statestream ──> cyd/nl/<domain>/<object_id>/state   (retained)
   cyd-hist.timer   ──> cyd/nl/hist/<key>                   (retained, 5 min)
+  automation cyd_nl_weather_publish ──> cyd/nl/weather     (retained, 10 min)
   automation cyd_nl_command        <── cyd/nl/cmd/lightbar
   automation cyd_nl_basil_command  <── cyd/nl/cmd/basil
                      ▲ MQTT (mosquitto 10.0.0.20:1883, user "cyd")
@@ -28,7 +29,7 @@ statistics tables read-only.
 
 | Page   | Opened by            | Content |
 |--------|----------------------|---------|
-| Home   | —                    | time/date, link dot, alert pill, light-bar toggle, 4 cards |
+| Home   | —                    | animated weather sky, time/date, link dot, outdoor weather or alert pill, 4 cards |
 | Room   | room card            | 24 h temp / humidity / CO2 chart (tabs), pressure |
 | Light  | light-bar card       | on/off, 15-step brightness and colour temp, presets |
 | Power  | power card           | 24 h house vs PC W, 7-day kWh bars |

@@ -22,6 +22,10 @@ struct Model {
   bool basil_online = false;
   bool need_water = false, tank_empty = false, drain_fault = false, grow_on = false;
 
+  // Outdoor weather (cyd/nl/weather, automation cyd_nl_weather_publish).
+  char wx_cond[20] = "";  // HA condition, e.g. "partlycloudy"; "" = unknown
+  float out_temp = NAN, out_hum = NAN, sun_elev = NAN;
+
   bool mqtt_connected = false;
   uint32_t last_msg_ms = 0;  // millis() of the last message on any topic
   bool ota_active = false;

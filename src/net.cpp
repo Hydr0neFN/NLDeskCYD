@@ -194,11 +194,50 @@ static void apply_hist(HistKey k, const char *json) {
   portEXIT_CRITICAL(&s_mux);
 }
 
+static float json_num(const char *json, const char *key) {
+  const char *p = after_key(json, key);
+  if (!p || !strncmp(p, "null", 4)) return NAN;
+  char *end;
+  float v = strtof(p, &end);
+  return end == p ? NAN : v;
+}
+
+// {"cond":"partlycloudy","t":12.7,"h":82,"wind":8.3,"elev":-33.79,"rising":false}
+static void apply_weather(const char *json) {
+  char cond[20] = "";
+  const char *p = after_key(json, "\"cond\":\"");
+  if (p) {
+    size_t i = 0;
+    while (p[i] && p[i] != '"' && i < sizeof(cond) - 1) {
+      cond[i] = p[i];
+      i++;
+    }
+    cond[i] = '\0';
+  }
+  float t = json_num(json, "\"t\":"), h = json_num(json, "\"h\":"), e = json_num(json, "\"elev\":");
+  portENTER_CRITICAL(&s_mux);
+  strlcpy(s_model.wx_cond, strcmp(cond, "unavailable") ? cond : "", sizeof(s_model.wx_cond));
+  s_model.out_temp = t;
+  s_model.out_hum = h;
+  s_model.sun_elev = e;
+  s_model.last_msg_ms = millis();
+  portEXIT_CRITICAL(&s_mux);
+}
+
 static void on_message(char *topic, uint8_t *payload, unsigned int len) {
   static constexpr size_t BASE_LEN = sizeof(TOPIC_BASE) - 1;
   static constexpr char HIST[] = "hist/";
   if (strncmp(topic, TOPIC_BASE, BASE_LEN) != 0) return;
   const char *suffix = topic + BASE_LEN;
+
+  if (strcmp(suffix, "weather") == 0) {
+    char w[256];
+    if (len >= sizeof(w)) return;
+    memcpy(w, payload, len);
+    w[len] = '\0';
+    apply_weather(w);
+    return;
+  }
 
   if (strncmp(suffix, HIST, sizeof(HIST) - 1) == 0) {
     static char big[1024];  // net task only; history payloads are ~450 B
@@ -273,6 +312,7 @@ static bool mqtt_connect() {
     s_mqtt.subscribe(topic, 1);
   }
   s_mqtt.subscribe(TOPIC_BASE "hist/+", 1);
+  s_mqtt.subscribe(TOPIC_BASE "weather", 1);
   return true;
 }
 

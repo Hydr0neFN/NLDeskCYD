@@ -1,5 +1,6 @@
-// Home: header (time over date, link dot, alert pill, light-bar toggle) and a
-// 2x2 grid of cards, each opening its detail page.
+// Home: animated weather sky (ui_sky.cpp) under a header (link dot, time,
+// date, outdoor weather or alert pill) and a 2x2 grid of cards, each opening
+// its detail page.
 
 #include <Arduino.h>
 #include <time.h>
@@ -7,7 +8,7 @@
 #include "config.h"
 #include "ui_common.h"
 
-static lv_obj_t *h_time, *h_date, *h_dot, *h_pill, *h_pill_lbl, *h_lamp_btn, *h_lamp_lbl;
+static lv_obj_t *h_time, *h_date, *h_dot, *h_pill, *h_pill_lbl, *h_wx;
 static lv_obj_t *r_temp, *r_hum, *r_co2;
 static lv_obj_t *l_state, *l_level, *l_kelvin, *l_bar_fill;
 static lv_obj_t *p_today, *p_house, *p_pc;
@@ -15,15 +16,13 @@ static lv_obj_t *b_status, *b_soil, *b_tank;
 
 static const char *const WEEKDAY[7] = {"日", "一", "二", "三", "四", "五", "六"};
 
-static Model s_m;  // last model, for the lamp toggle handler
-
 static void on_open(lv_event_t *e) { ui_show((Page)(intptr_t)lv_event_get_user_data(e)); }
-static void on_lamp(lv_event_t *) { light_toggle(s_m); }
 
 // Card-shaped button with a dim title; tapping opens `page`.
 static lv_obj_t *nav_card(lv_obj_t *scr, int x, int y, int w, int h, const char *title, Page page) {
   lv_obj_t *c = mk_button(scr, x, y, w, h, on_open, (void *)(intptr_t)page);
   lv_obj_set_style_pad_all(c, 8, 0);
+  lv_obj_set_style_bg_opa(c, LV_OPA_80, 0);  // the sky shows through, text stays legible
   lv_obj_t *t = mk_label(c, &font_noto_16, C_DIM, title);
   lv_obj_align(t, LV_ALIGN_TOP_LEFT, 0, -3);
   return c;
@@ -43,31 +42,35 @@ static lv_obj_t *value_row(lv_obj_t *card, int y, const char *label, const char 
 lv_obj_t *home_build() {
   lv_obj_t *scr = mk_screen();
 
-  // Header: time over date on the left (agy: keeps the dot / pill / lamp slots).
-  h_time = mk_label(scr, &lv_font_montserrat_20, C_TEXT, "--:--");
-  lv_obj_set_pos(h_time, 8, -1);
-  h_date = mk_label(scr, &font_noto_16, C_DIM, "");
-  lv_obj_set_pos(h_date, 8, 16);
+  sky_build(scr);
+  // Dark band under the header so white text stays readable on a bright sky.
+  lv_obj_t *scrim = mk_box(scr, 0, 0, 320, 36, lv_color_black());
+  lv_obj_set_style_bg_opa(scrim, LV_OPA_30, 0);
+
+  h_dot = mk_box(scr, 8, 14, 8, 8, C_ALERT);
+  lv_obj_set_style_radius(h_dot, LV_RADIUS_CIRCLE, 0);
+  h_time = mk_label(scr, &lv_font_montserrat_28, C_TEXT, "--:--");
+  lv_obj_set_pos(h_time, 22, 2);
+  h_date = mk_label(scr, &font_noto_16, C_TEXT, "");
+  lv_obj_set_pos(h_date, 106, 10);
   // Long-press the time for the panel colour check.
   lv_obj_t *hot = lv_obj_create(scr);
   lv_obj_remove_style_all(hot);
   lv_obj_set_pos(hot, 0, 0);
-  lv_obj_set_size(hot, 88, 36);
+  lv_obj_set_size(hot, 100, 36);
   lv_obj_add_flag(hot, LV_OBJ_FLAG_CLICKABLE);
   lv_obj_add_event_cb(hot, on_open, LV_EVENT_LONG_PRESSED, (void *)(intptr_t)Page::SWATCH);
 
-  h_dot = mk_box(scr, 92, 12, 10, 10, C_ALERT);
-  lv_obj_set_style_radius(h_dot, LV_RADIUS_CIRCLE, 0);
+  h_wx = mk_label(scr, &font_noto_20, C_TEXT, "");
+  lv_obj_align(h_wx, LV_ALIGN_TOP_RIGHT, -8, 6);
 
-  h_pill = mk_box(scr, 106, 5, 90, 24, C_ALERT);
+  // Alerts take the weather's place: they matter more, and the sky still
+  // shows the weather.
+  h_pill = mk_box(scr, 200, 6, 116, 24, C_ALERT);
   lv_obj_set_style_radius(h_pill, 12, 0);
   h_pill_lbl = mk_label(h_pill, &font_noto_16, C_BG, "");
   lv_obj_center(h_pill_lbl);
   lv_obj_add_flag(h_pill, LV_OBJ_FLAG_HIDDEN);
-
-  h_lamp_btn = mk_button(scr, 200, 3, 116, 30, on_lamp, nullptr);
-  h_lamp_lbl = mk_label(h_lamp_btn, &font_noto_20, C_TEXT, "掛燈");
-  lv_obj_center(h_lamp_lbl);
 
   // Room
   lv_obj_t *c = nav_card(scr, 4, 38, 154, 96, "室內", Page::ROOM);
@@ -111,7 +114,7 @@ lv_obj_t *home_build() {
 }
 
 static void refresh_header(const Model &m, bool live) {
-  char buf[24];
+  char buf[40];
   time_t now = time(nullptr);
   if (now >= 1700000000) {
     struct tm tm;
@@ -143,14 +146,17 @@ static void refresh_header(const Model &m, bool live) {
   }
   set_hidden(h_pill, pill == nullptr);
 
-  bool on = light_disp_on(m);
-  set_bg(h_lamp_btn, on ? C_ACCENT : C_CARD);
-  set_text_color(h_lamp_lbl, on ? C_BG : (m.lb_known ? C_TEXT : C_STALE));
-  set_text(h_lamp_lbl, on ? "掛燈 開" : "掛燈 關");
+  if (m.wx_cond[0] && !isnan(m.out_temp)) {
+    snprintf(buf, sizeof(buf), "%.0f° %s", m.out_temp, sky_label(m.wx_cond));
+    set_text(h_wx, buf);
+  } else {
+    set_text(h_wx, "");
+  }
+  set_hidden(h_wx, pill != nullptr);
 }
 
 void home_refresh(const Model &m, bool live) {
-  s_m = m;
+  sky_update(m);
   refresh_header(m, live);
 
   char buf[24], num[12];
