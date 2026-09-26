@@ -30,14 +30,14 @@ struct Cond {
   Group group;
 };
 static const Cond CONDS[] = {
-    {"sunny", "晴", G_CLEAR},           {"clear-night", "晴朗", G_CLEAR},
+    {"sunny", "晴", G_CLEAR},           {"clear-night", "晴夜", G_CLEAR},
     {"partlycloudy", "晴時多雲", G_PARTLY}, {"cloudy", "陰", G_CLOUDY},
     {"rainy", "雨", G_RAIN},            {"pouring", "大雨", G_POUR},
     {"snowy", "雪", G_SNOW},            {"snowy-rainy", "雨夾雪", G_SNOW},
-    {"hail", "冰雹", G_SNOW},           {"lightning", "雷", G_STORM},
+    {"hail", "冰雹", G_SNOW},           {"lightning", "雷電", G_STORM},
     {"lightning-rainy", "雷雨", G_STORM}, {"fog", "霧", G_FOG},
-    {"windy", "強風", G_CLOUDY},        {"windy-variant", "強風多雲", G_CLOUDY},
-    {"exceptional", "異常", G_STORM},
+    {"windy", "強風", G_CLOUDY},        {"windy-variant", "多雲強風", G_CLOUDY},
+    {"exceptional", "劇烈天氣", G_STORM},
 };
 
 // [group][phase] = {top, bottom}; copied from the projector page's SKY table.
@@ -175,13 +175,34 @@ static void update_bodies(bool force) {
   place(s_moon, moon, MOON_D, clear);
 }
 
+// Filled circle centred at (cx, cy) inside `parent`.
+static void disc(lv_obj_t *parent, int cx, int cy, int d, uint32_t rgb, lv_opa_t opa) {
+  lv_obj_t *o = mk_box(parent, cx - d / 2, cy - d / 2, d, d, lv_color_hex(rgb));
+  lv_obj_set_style_radius(o, LV_RADIUS_CIRCLE, 0);
+  lv_obj_set_style_bg_opa(o, opa, 0);
+}
+
 void sky_build(lv_obj_t *scr) {
   s_scr = scr;
   lv_obj_set_style_bg_grad_dir(scr, LV_GRAD_DIR_VER, 0);
 
   s_glow = blob(0, 0, GLOW_D, GLOW_D, 0xFFD27A, LV_OPA_10);
-  s_sun = blob(0, 0, SUN_D, SUN_D, 0xFFD27A, LV_OPA_COVER);
-  s_moon = blob(0, 0, MOON_D, MOON_D, 0xE8E6D9, LV_OPA_90);
+  // Sun: warm orange rim around a pale hot core (concentric discs, children
+  // move with the parent).
+  s_sun = blob(0, 0, SUN_D, SUN_D, 0xFFB347, LV_OPA_COVER);
+  disc(s_sun, SUN_D / 2, SUN_D / 2, SUN_D * 86 / 100, 0xFFCB66, LV_OPA_COVER);
+  disc(s_sun, SUN_D / 2, SUN_D / 2, SUN_D * 64 / 100, 0xFFE59A, LV_OPA_COVER);
+  // Moon: pale disc with darker maria and a few craters, laid out roughly
+  // like the near side (centre x, centre y, diameter as % of the disc).
+  s_moon = blob(0, 0, MOON_D, MOON_D, 0xE8E6D9, LV_OPA_COVER);
+  static const uint8_t MARIA[][3] = {
+      {34, 30, 26}, {56, 24, 18}, {30, 56, 22}, {62, 48, 24}, {48, 70, 14},
+  };
+  static const uint8_t CRATERS[][3] = {
+      {72, 74, 8}, {20, 40, 6}, {44, 88, 7}, {80, 34, 5}, {60, 86, 5}, {84, 58, 6},
+  };
+  for (auto &m : MARIA) disc(s_moon, MOON_D * m[0] / 100, MOON_D * m[1] / 100, MOON_D * m[2] / 100, 0xB9B6A9, LV_OPA_70);
+  for (auto &c : CRATERS) disc(s_moon, MOON_D * c[0] / 100, MOON_D * c[1] / 100, MOON_D * c[2] / 100, 0xA19E92, LV_OPA_80);
   for (int i = 0; i < N_STARS; i++) {
     s_stars[i] = blob(random(0, 316), random(0, 150), 2, 2, 0xFFFFFF, LV_OPA_COVER);
   }

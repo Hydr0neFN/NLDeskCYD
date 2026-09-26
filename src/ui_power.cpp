@@ -7,7 +7,7 @@
 
 static constexpr int CX = 48, CY = 82, CW = 260, CH = 88;   // line chart
 static constexpr int BX = 20, BY = 98, BW = 288, BH = 72;   // bar chart
-static const char *const TABS[2] = {"24h 功率", "7日用電"};
+static const char *const TABS[2] = {"24h 功率", "7天用電"};
 static const char *const WEEKDAY[7] = {"日", "一", "二", "三", "四", "五", "六"};
 
 static Series s_house, s_pc, s_daily;
@@ -149,7 +149,7 @@ void power_refresh(const Model &m, bool live) {
   set_text(f_house, buf);
   set_text_color(f_house, live ? C_ACCENT : C_STALE);
   if (isnan(m.pc_w)) {
-    set_text(f_pc, "電腦 關機");
+    set_text(f_pc, "電腦 已關機");
   } else if (isnan(m.pc_kwh)) {
     snprintf(buf, sizeof(buf), "電腦 %.0f W", m.pc_w);
     set_text(f_pc, buf);

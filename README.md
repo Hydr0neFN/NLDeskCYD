@@ -31,12 +31,12 @@ statistics tables read-only.
 
 | Page   | Opened by            | Content |
 |--------|----------------------|---------|
-| Home   | —                    | animated weather sky, time/date, link dot, outdoor weather or alert pill, 4 cards |
+| Home   | —                    | animated weather sky, time/date, outdoor weather or alert pill, 4 cards |
 | Room   | room card            | 24 h temp / humidity / CO2 chart (tabs), pressure |
 | Light  | light-bar card       | on/off, 15-step brightness and colour temp, presets |
 | Power  | power card           | 24 h house vs PC W, 7-day kWh bars |
 | Basil  | basil card           | 48 h soil / tank chart, plant light, two-tap water / clear fault |
-| Colour | long-press the clock | palette swatches + display inversion toggle (persisted) |
+| Colour check | long-press the clock | palette swatches + display inversion toggle (persisted) |
 
 ## Sky background
 
@@ -69,5 +69,6 @@ Arduino-ESP32 core 2.0.x (platform espressif32 7.x): LEDC uses the channel API.
 
 ## Fonts
 
-CJK labels use Noto Sans TC subsets generated from the characters actually in
-`src/*.cpp`. After changing any CJK text: `python tools/gen_fonts.py`.
+CJK labels use Noto Sans TC subsets (regular and bold) generated from the
+characters actually in `src/*.cpp`. After changing any CJK text:
+`python tools/gen_fonts.py` (needs node and fontTools).

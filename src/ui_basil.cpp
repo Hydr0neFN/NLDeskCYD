@@ -103,7 +103,7 @@ lv_obj_t *basil_build() {
   // Drain-fault banner: covers the top of the chart only while latched.
   banner = mk_box(scr, 4, 74, 312, 40, C_ALERT);
   lv_obj_set_style_radius(banner, 8, 0);
-  t = mk_label(banner, &font_noto_16, C_BG, "排水異常 裝置已停");
+  t = mk_label(banner, &font_noto_16, C_BG, "排水異常 已停機");
   lv_obj_align(t, LV_ALIGN_LEFT_MID, 10, 0);
   clear_btn = mk_button(banner, 172, 4, 134, 32, on_clear, nullptr);
   clear_lbl = mk_label(clear_btn, &font_noto_16, C_TEXT, "");
@@ -171,8 +171,8 @@ void basil_refresh(const Model &m, bool live) {
   // drain fault banner + two-tap clear
   set_hidden(banner, !(live && m.drain_fault));
   bool carm = armed(clear_armed_until);
-  if (carm) snprintf(buf, sizeof(buf), "確認已排水? %lu", (clear_armed_until - now) / 1000 + 1);
-  set_text(clear_lbl, carm ? buf : "解除故障");
+  if (carm) snprintf(buf, sizeof(buf), "確認已排空? %lu", (clear_armed_until - now) / 1000 + 1);
+  set_text(clear_lbl, carm ? buf : "清除異常");
   set_bg(clear_btn, carm ? C_ACCENT : C_CARD);
   set_text_color(clear_lbl, carm ? C_BG : C_TEXT);
 
@@ -180,7 +180,7 @@ void basil_refresh(const Model &m, bool live) {
   bool ok = water_allowed(m);
   bool warm = ok && armed(water_armed_until);
   if (!ok) {
-    set_text(water_lbl, m.tank_empty ? "水箱空" : (m.drain_fault ? "排水異常" : "無法澆水"));
+    set_text(water_lbl, m.tank_empty ? "水箱缺水" : (m.drain_fault ? "排水異常" : "無法澆水"));
     set_text_color(water_lbl, C_STALE);
     set_bg(water_btn, C_CARD);
   } else if (armed(water_sent_until)) {

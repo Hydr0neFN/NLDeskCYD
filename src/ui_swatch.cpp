@@ -26,7 +26,7 @@ static void on_invert(lv_event_t *) { display_set_inverted(!display_is_inverted(
 
 lv_obj_t *swatch_build() {
   lv_obj_t *scr = mk_screen();
-  mk_header(scr, "色票");
+  mk_header(scr, "螢幕校色");
   lv_obj_t *b = mk_button(scr, 200, 2, 116, 32, on_invert, nullptr);
   inv_lbl = mk_label(b, &lv_font_montserrat_14, C_TEXT, "");
   lv_obj_center(inv_lbl);

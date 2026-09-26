@@ -24,10 +24,18 @@ for f in (ROOT / "src").glob("*.cpp"):
 chars = "".join(sorted(c for c in chars if not 0xF000 <= ord(c) <= 0xF8FF and not 0x2500 <= ord(c) <= 0x257F))
 print(f"{len(chars)} glyphs: {chars}")
 
-for size in (16, 20):
-    out = ROOT / "src" / f"font_noto_{size}.c"
+# Bold variants for the home header: lv_font_conv always renders a variable
+# font's default weight, so instance wght=700 first (needs fontTools).
+BOLD = ROOT / ".pio" / "NotoSansTC-Bold.ttf"
+if not BOLD.exists():
+    BOLD.parent.mkdir(exist_ok=True)
+    subprocess.run([sys.executable, "-m", "fontTools.varLib.instancer", FONT, "wght=700",
+                    "-o", str(BOLD)], check=True)
+
+for font, suffix, size in ((FONT, "", 16), (FONT, "", 20), (str(BOLD), "_bold", 16), (str(BOLD), "_bold", 20)):
+    out = ROOT / "src" / f"font_noto_{size}{suffix}.c"
     subprocess.run(
-        ["npx", "-y", "lv_font_conv", "--font", FONT, "--size", str(size), "--bpp", "4",
+        ["npx", "-y", "lv_font_conv", "--font", font, "--size", str(size), "--bpp", "4",
          "--format", "lvgl", "--range", "0x20-0x7E", "--symbols", chars,
          "--lv-include", "lvgl.h", "-o", str(out)],
         check=True, shell=sys.platform == "win32",

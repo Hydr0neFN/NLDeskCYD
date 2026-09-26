@@ -47,12 +47,17 @@ lv_obj_t *home_build() {
   lv_obj_t *scrim = mk_box(scr, 0, 0, 320, 36, lv_color_black());
   lv_obj_set_style_bg_opa(scrim, LV_OPA_30, 0);
 
-  h_dot = mk_box(scr, 8, 14, 8, 8, C_ALERT);
-  lv_obj_set_style_radius(h_dot, LV_RADIUS_CIRCLE, 0);
+  // Header text is bold and centred on the clock's midline. 16 px, not 20:
+  // clock + date + "13° 晴時多雲" do not fit 320 px at 20 px.
+  const int mid = 2 + lv_font_get_line_height(&lv_font_montserrat_28) / 2;
+  const int y16 = mid - lv_font_get_line_height(&font_noto_16_bold) / 2;
   h_time = mk_label(scr, &lv_font_montserrat_28, C_TEXT, "--:--");
-  lv_obj_set_pos(h_time, 22, 2);
-  h_date = mk_label(scr, &font_noto_16, C_TEXT, "");
-  lv_obj_set_pos(h_date, 106, 10);
+  lv_obj_set_pos(h_time, 8, 2);
+  h_date = mk_label(scr, &font_noto_16_bold, C_TEXT, "");
+  lv_obj_set_pos(h_date, 110, y16);  // re-placed beside the clock on every change
+  // Link dot, top-right corner, only shown when something is wrong.
+  h_dot = mk_box(scr, 312, 2, 6, 6, C_ALERT);
+  lv_obj_set_style_radius(h_dot, LV_RADIUS_CIRCLE, 0);
   // Long-press the time for the panel colour check.
   lv_obj_t *hot = lv_obj_create(scr);
   lv_obj_remove_style_all(hot);
@@ -61,14 +66,14 @@ lv_obj_t *home_build() {
   lv_obj_add_flag(hot, LV_OBJ_FLAG_CLICKABLE);
   lv_obj_add_event_cb(hot, on_open, LV_EVENT_LONG_PRESSED, (void *)(intptr_t)Page::SWATCH);
 
-  h_wx = mk_label(scr, &font_noto_20, C_TEXT, "");
-  lv_obj_align(h_wx, LV_ALIGN_TOP_RIGHT, -8, 6);
+  h_wx = mk_label(scr, &font_noto_16_bold, C_TEXT, "");
+  lv_obj_align(h_wx, LV_ALIGN_TOP_RIGHT, -10, y16);
 
   // Alerts take the weather's place: they matter more, and the sky still
   // shows the weather.
-  h_pill = mk_box(scr, 200, 6, 116, 24, C_ALERT);
+  h_pill = mk_box(scr, 196, mid - 13, 120, 26, C_ALERT);
   lv_obj_set_style_radius(h_pill, 12, 0);
-  h_pill_lbl = mk_label(h_pill, &font_noto_16, C_BG, "");
+  h_pill_lbl = mk_label(h_pill, &font_noto_16_bold, C_BG, "");
   lv_obj_center(h_pill_lbl);
   lv_obj_add_flag(h_pill, LV_OBJ_FLAG_HIDDEN);
 
@@ -120,7 +125,11 @@ static void refresh_header(const Model &m, bool live) {
     struct tm tm;
     localtime_r(&now, &tm);
     snprintf(buf, sizeof(buf), "%02d:%02d", tm.tm_hour, tm.tm_min);
-    set_text(h_time, buf);
+    if (strcmp(lv_label_get_text(h_time), buf) != 0) {
+      set_text(h_time, buf);
+      lv_obj_update_layout(h_time);
+      lv_obj_set_x(h_date, lv_obj_get_x(h_time) + lv_obj_get_width(h_time) + 10);
+    }
     snprintf(buf, sizeof(buf), "%d/%d 週%s", tm.tm_mon + 1, tm.tm_mday, WEEKDAY[tm.tm_wday]);
     set_text(h_date, buf);
   } else {
@@ -128,15 +137,17 @@ static void refresh_header(const Model &m, bool live) {
     set_text(h_date, "");
   }
 
-  // green = connected and data flowing; amber = connected but quiet for 3 min
-  // (the house meter normally publishes every few seconds); red = no broker.
-  set_bg(h_dot, !m.mqtt_connected ? C_ALERT : (millis() - m.last_msg_ms > 180000 ? C_WARN : C_OK));
+  // red = no broker; amber = connected but quiet for 3 min (the house meter
+  // normally publishes every few seconds); hidden when all is well.
+  bool quiet = millis() - m.last_msg_ms > 180000;
+  set_bg(h_dot, !m.mqtt_connected ? C_ALERT : C_WARN);
+  set_hidden(h_dot, m.mqtt_connected && !quiet);
 
   // One pill, highest priority first. Everything else stays on its card.
   const char *pill = nullptr;
   lv_color_t pc = C_ALERT;
   if (live && m.drain_fault) pill = "排水異常";
-  else if (live && m.tank_empty) pill = "水箱空";
+  else if (live && m.tank_empty) pill = "水箱缺水";
   else if (live && !isnan(m.co2) && m.co2 >= CO2_ALERT) pill = "CO2 過高";
   else if (live && m.need_water) { pill = "需澆水"; pc = C_WARN; }
   else if (live && !m.basil_online) { pill = "羅勒離線"; pc = C_WARN; }

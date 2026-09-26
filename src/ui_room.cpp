@@ -145,13 +145,13 @@ void room_refresh(const Model &m, bool live) {
   if (!live || isnan(m.co2)) {
     set_text(co2_status, "");
   } else if (m.co2 >= CO2_ALERT) {
-    set_text(co2_status, "CO2 過高 開窗");
+    set_text(co2_status, "CO2 過高 請開窗");
     set_text_color(co2_status, C_ALERT);
   } else if (m.co2 >= CO2_WARN) {
     set_text(co2_status, "CO2 偏高");
     set_text_color(co2_status, C_WARN);
   } else {
-    set_text(co2_status, "空氣正常");
+    set_text(co2_status, "空氣良好");
     set_text_color(co2_status, C_OK);
   }
 
