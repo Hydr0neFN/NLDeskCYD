@@ -1,0 +1,37 @@
+#pragma once
+
+// nl-pi: mosquitto on 1883, Home Assistant publishes to it via mqtt_statestream.
+#define MQTT_HOST "10.0.0.20"
+#define MQTT_PORT 1883
+#define MQTT_CLIENT_ID "nldeskcyd"
+#define OTA_HOSTNAME "nldeskcyd"
+
+// HA side (configuration.yaml): mqtt_statestream base_topic.
+#define TOPIC_BASE "cyd/nl/"
+// HA side (automations.yaml, id cyd_nl_command).
+#define TOPIC_CMD_LIGHTBAR "cyd/nl/cmd/lightbar"
+// HA side (automations.yaml, id cyd_nl_basil_command).
+#define TOPIC_CMD_BASIL "cyd/nl/cmd/basil"
+// Our own availability (LWT) and diagnostics.
+#define TOPIC_PANEL "cyd/nl/panel/"
+
+#define TZ_INFO "CET-1CEST,M3.5.0,M10.5.0/3"
+#define NTP_SERVER_1 "pool.ntp.org"
+#define NTP_SERVER_2 "time.google.com"
+
+// Night = the user is asleep in the same room. Matches the basil grow light's
+// dark period (00:30-07:30), which was set for the same reason.
+#define NIGHT_START_MIN (0 * 60 + 30)
+#define NIGHT_END_MIN (7 * 60 + 30)
+
+// Backlight duty (0-255) per mode.
+#define BL_DAY_ACTIVE 220
+#define BL_DAY_GLANCE 22   // idle during the day: dim glance mode
+#define BL_DAY_ALERT 100   // idle during the day with an alert pending
+#define BL_NIGHT_ACTIVE 45 // touched at night
+#define BL_NIGHT_IDLE 0    // night: fully dark, alerts do not wake it
+#define IDLE_TIMEOUT_MS 30000
+
+// Thresholds.
+#define CO2_WARN 800
+#define CO2_ALERT 1200
