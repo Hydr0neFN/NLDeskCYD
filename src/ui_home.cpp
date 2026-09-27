@@ -13,7 +13,7 @@ static lv_obj_t *r_temp, *r_hum, *r_co2;
 static lv_obj_t *l_state, *l_level, *l_kelvin, *l_bar_fill;
 static lv_obj_t *p_today, *p_cost, *p_house, *p_pc;
 static lv_obj_t *b_status, *b_soil, *b_tank;
-static lv_obj_t *s_ui, *s_idle, *i_alert, *i_alert_lbl, *i_time, *i_date, *i_in, *i_in_sub, *i_out;
+static lv_obj_t *s_ui, *s_idle, *i_alert, *i_alert_lbl, *i_time, *i_date, *i_in, *i_in_sub, *i_out, *i_out_sub, *i_div;
 static bool s_idle_on = false;
 static void build_idle(lv_obj_t *root);
 
@@ -144,12 +144,12 @@ lv_obj_t *home_build() {
 // Shown instead of the header + cards when nobody has touched the panel for
 // IDLE_TIMEOUT_MS by day (backlight at half): big clock, date, indoor and
 // outdoor at a glance, alerts only when active. Layout from an agy review
-// (2026-09-27), plus CO2 in the indoor column. A 40 % black scrim keeps text
+// (2026-09-27), plus CO2 in the indoor column. A 50 % black scrim keeps text
 // legible on the sky at half backlight.
 
 static void build_idle(lv_obj_t *root) {
   s_idle = mk_box(root, 0, 0, 320, 240, lv_color_black());
-  lv_obj_set_style_bg_opa(s_idle, LV_OPA_40, 0);
+  lv_obj_set_style_bg_opa(s_idle, LV_OPA_50, 0);
   lv_obj_add_flag(s_idle, LV_OBJ_FLAG_HIDDEN);
 
   i_alert = mk_box(s_idle, 0, 8, 10, 24, C_ALERT);  // width set on refresh
@@ -160,29 +160,35 @@ static void build_idle(lv_obj_t *root) {
 
   i_time = mk_label(s_idle, &lv_font_montserrat_48, C_TEXT, "--:--");
   lv_obj_align(i_time, LV_ALIGN_TOP_MID, 0, 46);
-  i_date = mk_label(s_idle, &font_noto_20, C_DIM, "");
+  i_date = mk_label(s_idle, &font_noto_20, C_SUB, "");
   lv_obj_align(i_date, LV_ALIGN_TOP_MID, 0, 112);
 
-  lv_obj_t *div = mk_box(s_idle, 160, 170, 1, 48, C_DIM);
-  lv_obj_set_style_bg_opa(div, LV_OPA_50, 0);
+  // Two columns either side of a divider. Positions are set per refresh from
+  // the text widths (layout_idle_row) so the pair sits centred as a group with
+  // equal gaps at the divider; fixed half-width columns looked lopsided.
+  i_div = mk_box(s_idle, 160, 170, 1, 48, C_DIM);
+  lv_obj_set_style_bg_opa(i_div, LV_OPA_50, 0);
 
   i_in = mk_label(s_idle, &font_noto_20_bold, C_TEXT, "");
-  lv_obj_set_width(i_in, 150);
-  lv_obj_set_style_text_align(i_in, LV_TEXT_ALIGN_CENTER, 0);
-  lv_obj_set_pos(i_in, 5, 168);
-  i_in_sub = mk_label(s_idle, &font_noto_16, C_DIM, "");
-  lv_obj_set_width(i_in_sub, 150);
-  lv_obj_set_style_text_align(i_in_sub, LV_TEXT_ALIGN_CENTER, 0);
-  lv_obj_set_pos(i_in_sub, 5, 196);
-
+  i_in_sub = mk_label(s_idle, &font_noto_16, C_SUB, "");
   i_out = mk_label(s_idle, &font_noto_20_bold, C_TEXT, "");
-  lv_obj_set_width(i_out, 150);
-  lv_obj_set_style_text_align(i_out, LV_TEXT_ALIGN_CENTER, 0);
-  lv_obj_set_pos(i_out, 165, 168);
-  lv_obj_t *t = mk_label(s_idle, &font_noto_16, C_DIM, "室外");
-  lv_obj_set_width(t, 150);
-  lv_obj_set_style_text_align(t, LV_TEXT_ALIGN_CENTER, 0);
-  lv_obj_set_pos(t, 165, 196);
+  i_out_sub = mk_label(s_idle, &font_noto_16, C_SUB, "室外");
+}
+
+static void layout_idle_row() {
+  static constexpr int GAP = 16, Y_MAIN = 168, Y_SUB = 196;
+  lv_obj_update_layout(s_idle);
+  int l = LV_MAX(lv_obj_get_width(i_in), lv_obj_get_width(i_in_sub));
+  int r = LV_MAX(lv_obj_get_width(i_out), lv_obj_get_width(i_out_sub));
+  int x0 = (320 - (l + GAP + 1 + GAP + r)) / 2;
+  if (x0 < 4) x0 = 4;
+  int div_x = x0 + l + GAP;
+  int lc = x0 + l / 2, rc = div_x + 1 + GAP + r / 2;
+  lv_obj_set_pos(i_in, lc - lv_obj_get_width(i_in) / 2, Y_MAIN);
+  lv_obj_set_pos(i_in_sub, lc - lv_obj_get_width(i_in_sub) / 2, Y_SUB);
+  lv_obj_set_pos(i_out, rc - lv_obj_get_width(i_out) / 2, Y_MAIN);
+  lv_obj_set_pos(i_out_sub, rc - lv_obj_get_width(i_out_sub) / 2, Y_SUB);
+  lv_obj_set_x(i_div, div_x);
 }
 
 void home_set_idle(bool idle) {
@@ -211,8 +217,8 @@ static void refresh_idle(const Model &m, bool live) {
   fmt(num, sizeof(num), m.co2, 0);
   snprintf(buf, sizeof(buf), "室內  CO2 %s", num);
   set_text(i_in_sub, buf);
-  lv_color_t co2c = C_DIM;
-  if (live && !isnan(m.co2)) co2c = m.co2 >= CO2_ALERT ? C_ALERT : (m.co2 >= CO2_WARN ? C_WARN : C_DIM);
+  lv_color_t co2c = C_SUB;
+  if (live && !isnan(m.co2)) co2c = m.co2 >= CO2_ALERT ? C_ALERT : (m.co2 >= CO2_WARN ? C_WARN : C_SUB);
   set_text_color(i_in_sub, co2c);
 
   if (m.wx_cond[0] && !isnan(m.out_temp)) {
@@ -221,6 +227,7 @@ static void refresh_idle(const Model &m, bool live) {
   } else {
     set_text(i_out, "--");
   }
+  layout_idle_row();
 
   // Alerts only when active, same priority as the home pill.
   const char *a = nullptr;

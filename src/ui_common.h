@@ -13,6 +13,7 @@
 #define C_GRID lv_color_hex(0x21262D)
 #define C_TEXT lv_color_hex(0xE6EDF3)
 #define C_DIM lv_color_hex(0x8B949E)
+#define C_SUB lv_color_hex(0xC9D1D9)  // secondary text over the sky (idle screen)
 #define C_STALE lv_color_hex(0x484F58)
 #define C_ACCENT lv_color_hex(0xD29922)
 #define C_OK lv_color_hex(0x3FB950)
