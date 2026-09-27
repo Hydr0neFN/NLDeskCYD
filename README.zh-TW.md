@@ -11,6 +11,7 @@
   mqtt_statestream ──> cyd/nl/<domain>/<object_id>/state   (retained)
   cyd-hist.timer   ──> cyd/nl/hist/<key>                   (retained, 5 min)
   automation cyd_nl_weather_publish ──> cyd/nl/weather     (retained, 10 min)
+                                    ──> cyd/nl/forecast    (retained, 10 min)
   automation cyd_nl_command        <── cyd/nl/cmd/lightbar
   automation cyd_nl_basil_command  <── cyd/nl/cmd/basil
                      ▲ MQTT (mosquitto 10.0.0.20:1883, user "cyd")
@@ -30,6 +31,7 @@
 | 用電   | 用電卡片             | 24 小時全屋 vs 電腦瓦數、7 天 kWh 長條圖 |
 | 羅勒   | 羅勒卡片             | 48 小時土壤／水箱圖表、植物燈、按兩次確認的澆水／清除異常 |
 | 螢幕校色 | 長按時鐘           | 調色盤色票＋螢幕反相切換（設定會儲存） |
+| 逐時預報 | 長按室外天氣       | 未來 12 小時：時間、天氣、溫度、雨量（HA `weather.get_forecasts` → retained `cyd/nl/forecast`） |
 
 ## 天空背景
 

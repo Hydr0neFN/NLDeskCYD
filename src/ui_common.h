@@ -25,7 +25,7 @@
 #define C_COOL lv_color_hex(0xCFE3FF)
 #define C_SEG_OFF lv_color_hex(0x21262D)
 
-enum class Page : uint8_t { HOME, LIGHT, ROOM, POWER, BASIL, SWATCH };
+enum class Page : uint8_t { HOME, LIGHT, ROOM, POWER, BASIL, SWATCH, FORECAST, COUNT };
 
 // Navigation (instant loads only: no TE pin, animated transitions tear).
 void ui_show(Page p);
@@ -112,6 +112,11 @@ void sky_set_fps(int fps);           // 0 = still sky
 void sky_set_full_redraw(bool on);   // bench only: invalidate the whole screen each frame
 // (frames are driven by an internal lv_timer)
 const char *sky_label(const char *ha_cond);  // "partlycloudy" -> "晴時多雲"
+const char *sky_short_label(const char *ha_cond);  // at most 3 characters, for grids
+lv_color_t sky_cond_color(const char *ha_cond);    // daytime sky colour of the condition
+
+lv_obj_t *forecast_build();
+void forecast_refresh();
 
 lv_obj_t *swatch_build();
 void swatch_refresh();

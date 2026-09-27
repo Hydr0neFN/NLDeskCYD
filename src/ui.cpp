@@ -5,7 +5,8 @@
 //         ├─ tap light card  ─> LIGHT  (light-bar steppers, presets)
 //         ├─ tap power card  ─> POWER  (24 h W chart, 7-day kWh bars)
 //         ├─ tap basil card  ─> BASIL  (48 h soil / tank chart, controls)
-//         └─ long-press clock ─> SWATCH (panel colour check)
+//         ├─ long-press clock ─> SWATCH (panel colour check)
+//         └─ long-press weather ─> FORECAST (next 12 hours)
 //
 // Layout and palette follow two agy design reviews (2026-09-26).
 
@@ -17,7 +18,7 @@
 #include "config.h"
 #include "ui_common.h"
 
-static lv_obj_t *s_screens[6];
+static lv_obj_t *s_screens[(int)Page::COUNT];
 static Page s_page = Page::HOME;
 static lv_obj_t *o_ota, *o_ota_lbl;
 
@@ -39,6 +40,7 @@ void ui_init() {
   s_screens[(int)Page::POWER] = power_build();
   s_screens[(int)Page::BASIL] = basil_build();
   s_screens[(int)Page::SWATCH] = swatch_build();
+  s_screens[(int)Page::FORECAST] = forecast_build();
 
   // OTA overlay on the top layer. Clickable, so touches during a flash are
   // absorbed instead of reaching the (invisible) page underneath.
@@ -84,5 +86,7 @@ void ui_refresh(const Model &m) {
     case Page::POWER: power_refresh(m, live); break;
     case Page::BASIL: basil_refresh(m, live); break;
     case Page::SWATCH: swatch_refresh(); break;
+    case Page::FORECAST: forecast_refresh(); break;
+    case Page::COUNT: break;
   }
 }

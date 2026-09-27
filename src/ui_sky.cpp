@@ -59,6 +59,27 @@ const char *sky_label(const char *ha_cond) {
   return "";
 }
 
+static Group group_of(const char *ha_cond);
+
+// Two-character labels for the forecast grid, where a 49 px cell cannot fit
+// "晴時多雲" (16 px bold CJK = 16 px per character).
+const char *sky_short_label(const char *ha_cond) {
+  static const char *const SHORT[][2] = {
+      {"sunny", "晴"},         {"clear-night", "晴"},     {"partlycloudy", "多雲"},
+      {"cloudy", "陰"},        {"rainy", "雨"},           {"pouring", "大雨"},
+      {"snowy", "雪"},         {"snowy-rainy", "雨夾雪"}, {"hail", "冰雹"},
+      {"lightning", "雷電"},   {"lightning-rainy", "雷雨"}, {"fog", "霧"},
+      {"windy", "強風"},       {"windy-variant", "強風"}, {"exceptional", "劇烈"},
+  };
+  for (auto &s : SHORT) {
+    if (!strcmp(s[0], ha_cond)) return s[1];
+  }
+  return "--";
+}
+
+// The condition's daytime sky colour (top of its gradient), for colour chips.
+lv_color_t sky_cond_color(const char *ha_cond) { return lv_color_hex(SKY[group_of(ha_cond)][P_DAY][0]); }
+
 static Group group_of(const char *ha_cond) {
   for (const Cond &c : CONDS) {
     if (!strcmp(c.ha, ha_cond)) return c.group;

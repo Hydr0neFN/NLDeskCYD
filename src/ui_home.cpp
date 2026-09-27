@@ -66,6 +66,14 @@ lv_obj_t *home_build() {
   lv_obj_add_flag(hot, LV_OBJ_FLAG_CLICKABLE);
   lv_obj_add_event_cb(hot, on_open, LV_EVENT_LONG_PRESSED, (void *)(intptr_t)Page::SWATCH);
 
+  // Long-press the outdoor weather for the hourly forecast.
+  lv_obj_t *wx_hot = lv_obj_create(scr);
+  lv_obj_remove_style_all(wx_hot);
+  lv_obj_set_pos(wx_hot, 190, 0);
+  lv_obj_set_size(wx_hot, 130, 36);
+  lv_obj_add_flag(wx_hot, LV_OBJ_FLAG_CLICKABLE);
+  lv_obj_add_event_cb(wx_hot, on_open, LV_EVENT_LONG_PRESSED, (void *)(intptr_t)Page::FORECAST);
+
   h_wx = mk_label(scr, &font_noto_16_bold, C_TEXT, "");
   lv_obj_align(h_wx, LV_ALIGN_TOP_RIGHT, -10, y16);
 

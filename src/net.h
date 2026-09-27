@@ -61,6 +61,20 @@ void net_snapshot(Model &out);
 // Returns true when a copy was made. Safe from core 1.
 bool net_hist(HistKey k, Series &out, uint32_t &seen);
 
+// Hourly forecast (cyd/nl/forecast, automation cyd_nl_weather_publish):
+// the next 12 hours from weather.get_forecasts.
+static constexpr int FC_MAX = 12;
+struct Forecast {
+  uint8_t n = 0;
+  uint8_t hour[FC_MAX];      // local hour 0-23
+  char cond[FC_MAX][16];     // HA condition, e.g. "partlycloudy"
+  int8_t temp[FC_MAX];       // °C
+  float rain[FC_MAX];        // mm in that hour
+};
+
+// Copies the forecast into `out` if it changed since `seen`. Safe from core 1.
+bool net_forecast(Forecast &out, uint32_t &seen);
+
 enum class CmdTarget : uint8_t { LIGHTBAR, BASIL };
 
 // Queues a command (JSON object text) for HA; see automations cyd_nl_command

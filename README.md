@@ -17,6 +17,7 @@ different UI and transport.
   mqtt_statestream ──> cyd/nl/<domain>/<object_id>/state   (retained)
   cyd-hist.timer   ──> cyd/nl/hist/<key>                   (retained, 5 min)
   automation cyd_nl_weather_publish ──> cyd/nl/weather     (retained, 10 min)
+                                    ──> cyd/nl/forecast    (retained, 10 min)
   automation cyd_nl_command        <── cyd/nl/cmd/lightbar
   automation cyd_nl_basil_command  <── cyd/nl/cmd/basil
                      ▲ MQTT (mosquitto 10.0.0.20:1883, user "cyd")
@@ -39,6 +40,7 @@ statistics tables read-only.
 | Power  | power card           | 24 h house vs PC W, 7-day kWh bars |
 | Basil  | basil card           | 48 h soil / tank chart, plant light, two-tap water / clear fault |
 | Colour check | long-press the clock | palette swatches + display inversion toggle (persisted) |
+| Forecast | long-press the outdoor weather | next 12 hours: hour, condition, temperature, rain (HA `weather.get_forecasts` → retained `cyd/nl/forecast`) |
 
 ## Sky background
 

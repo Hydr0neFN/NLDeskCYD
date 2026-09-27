@@ -224,6 +224,57 @@ static void apply_weather(const char *json) {
   portEXIT_CRITICAL(&s_mux);
 }
 
+static Forecast s_forecast;
+static uint32_t s_forecast_ver = 0;
+
+bool net_forecast(Forecast &out, uint32_t &seen) {
+  bool changed = false;
+  portENTER_CRITICAL(&s_mux);
+  if (s_forecast_ver != seen) {
+    out = s_forecast;
+    seen = s_forecast_ver;
+    changed = true;
+  }
+  portEXIT_CRITICAL(&s_mux);
+  return changed;
+}
+
+// {"f":[[11,"partlycloudy",15,0.0],[12,"rainy",14,0.4],...]}
+static void apply_forecast(const char *json) {
+  static Forecast tmp;  // net task only
+  tmp.n = 0;
+  const char *p = strstr(json, "[[");
+  if (!p) return;
+  p++;
+  while (*p == '[' && tmp.n < FC_MAX) {
+    int i = tmp.n;
+    char *e;
+    tmp.hour[i] = (uint8_t)strtol(p + 1, &e, 10);
+    p = strchr(e, '"');
+    if (!p) break;
+    p++;
+    size_t k = 0;
+    while (*p && *p != '"' && k < sizeof(tmp.cond[i]) - 1) tmp.cond[i][k++] = *p++;
+    tmp.cond[i][k] = 0;
+    p = strchr(p, ',');
+    if (!p) break;
+    tmp.temp[i] = (int8_t)strtol(p + 1, &e, 10);
+    p = strchr(e, ',');
+    if (!p) break;
+    tmp.rain[i] = strtof(p + 1, &e);
+    p = strchr(e, ']');
+    if (!p) break;
+    tmp.n++;
+    p++;
+    while (*p == ',' || *p == ' ') p++;
+  }
+  if (!tmp.n) return;
+  portENTER_CRITICAL(&s_mux);
+  s_forecast = tmp;
+  s_forecast_ver++;
+  portEXIT_CRITICAL(&s_mux);
+}
+
 static void on_message(char *topic, uint8_t *payload, unsigned int len) {
   static constexpr size_t BASE_LEN = sizeof(TOPIC_BASE) - 1;
   static constexpr char HIST[] = "hist/";
@@ -246,6 +297,15 @@ static void on_message(char *topic, uint8_t *payload, unsigned int len) {
     s_model.bench_until_ms = secs ? millis() + secs * 1000 : 0;
     s_model.bench_fps = fps;
     portEXIT_CRITICAL(&s_mux);
+    return;
+  }
+
+  if (strcmp(suffix, "forecast") == 0) {
+    static char f[768];  // net task only; ~320 B for 12 rows
+    if (len >= sizeof(f)) return;
+    memcpy(f, payload, len);
+    f[len] = 0;
+    apply_forecast(f);
     return;
   }
 
@@ -332,6 +392,7 @@ static bool mqtt_connect() {
   }
   s_mqtt.subscribe(TOPIC_BASE "hist/+", 1);
   s_mqtt.subscribe(TOPIC_BASE "weather", 1);
+  s_mqtt.subscribe(TOPIC_BASE "forecast", 1);
   s_mqtt.subscribe(TOPIC_PANEL "bench", 0);
   return true;
 }
