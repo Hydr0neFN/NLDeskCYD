@@ -57,6 +57,8 @@ void ui_show(Page p) {
 
 Page ui_page() { return s_page; }
 
+void ui_set_idle(bool idle) { home_set_idle(idle); }
+
 void ui_go_home() {
   if (s_page != Page::HOME) ui_show(Page::HOME);
 }

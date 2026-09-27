@@ -13,6 +13,9 @@ static lv_obj_t *r_temp, *r_hum, *r_co2;
 static lv_obj_t *l_state, *l_level, *l_kelvin, *l_bar_fill;
 static lv_obj_t *p_today, *p_cost, *p_house, *p_pc;
 static lv_obj_t *b_status, *b_soil, *b_tank;
+static lv_obj_t *s_ui, *s_idle, *i_alert, *i_alert_lbl, *i_time, *i_date, *i_in, *i_in_sub, *i_out;
+static bool s_idle_on = false;
+static void build_idle(lv_obj_t *root);
 
 static const char *const WEEKDAY[7] = {"日", "一", "二", "三", "四", "五", "六"};
 
@@ -43,6 +46,14 @@ lv_obj_t *home_build() {
   lv_obj_t *scr = mk_screen();
 
   sky_build(scr);
+  lv_obj_t *root = scr;
+  // Everything interactive (header + cards) lives in s_ui so the idle layer
+  // can swap it out while the sky keeps running underneath.
+  s_ui = lv_obj_create(root);
+  lv_obj_remove_style_all(s_ui);
+  lv_obj_set_size(s_ui, 320, 240);
+  lv_obj_remove_flag(s_ui, LV_OBJ_FLAG_SCROLLABLE);
+  scr = s_ui;
   // Dark band under the header so white text stays readable on a bright sky.
   lv_obj_t *scrim = mk_box(scr, 0, 0, 320, 36, lv_color_black());
   lv_obj_set_style_bg_opa(scrim, LV_OPA_30, 0);
@@ -125,7 +136,109 @@ lv_obj_t *home_build() {
   b_soil = value_row(c, 18, "土壤", "%");
   b_tank = value_row(c, 50, "水箱", "%");
 
-  return scr;
+  build_idle(root);
+  return root;
+}
+
+// --- Idle layer ---------------------------------------------------------------
+// Shown instead of the header + cards when nobody has touched the panel for
+// IDLE_TIMEOUT_MS by day (backlight at half): big clock, date, indoor and
+// outdoor at a glance, alerts only when active. Layout from an agy review
+// (2026-09-27), plus CO2 in the indoor column. A 40 % black scrim keeps text
+// legible on the sky at half backlight.
+
+static void build_idle(lv_obj_t *root) {
+  s_idle = mk_box(root, 0, 0, 320, 240, lv_color_black());
+  lv_obj_set_style_bg_opa(s_idle, LV_OPA_40, 0);
+  lv_obj_add_flag(s_idle, LV_OBJ_FLAG_HIDDEN);
+
+  i_alert = mk_box(s_idle, 0, 8, 10, 24, C_ALERT);  // width set on refresh
+  lv_obj_set_style_radius(i_alert, 12, 0);
+  i_alert_lbl = mk_label(i_alert, &font_noto_16_bold, C_BG, "");
+  lv_obj_center(i_alert_lbl);
+  lv_obj_add_flag(i_alert, LV_OBJ_FLAG_HIDDEN);
+
+  i_time = mk_label(s_idle, &lv_font_montserrat_48, C_TEXT, "--:--");
+  lv_obj_align(i_time, LV_ALIGN_TOP_MID, 0, 46);
+  i_date = mk_label(s_idle, &font_noto_20, C_DIM, "");
+  lv_obj_align(i_date, LV_ALIGN_TOP_MID, 0, 112);
+
+  lv_obj_t *div = mk_box(s_idle, 160, 170, 1, 48, C_DIM);
+  lv_obj_set_style_bg_opa(div, LV_OPA_50, 0);
+
+  i_in = mk_label(s_idle, &font_noto_20_bold, C_TEXT, "");
+  lv_obj_set_width(i_in, 150);
+  lv_obj_set_style_text_align(i_in, LV_TEXT_ALIGN_CENTER, 0);
+  lv_obj_set_pos(i_in, 5, 168);
+  i_in_sub = mk_label(s_idle, &font_noto_16, C_DIM, "");
+  lv_obj_set_width(i_in_sub, 150);
+  lv_obj_set_style_text_align(i_in_sub, LV_TEXT_ALIGN_CENTER, 0);
+  lv_obj_set_pos(i_in_sub, 5, 196);
+
+  i_out = mk_label(s_idle, &font_noto_20_bold, C_TEXT, "");
+  lv_obj_set_width(i_out, 150);
+  lv_obj_set_style_text_align(i_out, LV_TEXT_ALIGN_CENTER, 0);
+  lv_obj_set_pos(i_out, 165, 168);
+  lv_obj_t *t = mk_label(s_idle, &font_noto_16, C_DIM, "室外");
+  lv_obj_set_width(t, 150);
+  lv_obj_set_style_text_align(t, LV_TEXT_ALIGN_CENTER, 0);
+  lv_obj_set_pos(t, 165, 196);
+}
+
+void home_set_idle(bool idle) {
+  if (!s_idle || s_idle_on == idle) return;
+  s_idle_on = idle;
+  set_hidden(s_ui, idle);
+  set_hidden(s_idle, !idle);
+}
+
+static void refresh_idle(const Model &m, bool live) {
+  char buf[48], num[12], num2[12];
+  time_t now = time(nullptr);
+  if (now >= 1700000000) {
+    struct tm tm;
+    localtime_r(&now, &tm);
+    snprintf(buf, sizeof(buf), "%02d:%02d", tm.tm_hour, tm.tm_min);
+    set_text(i_time, buf);
+    snprintf(buf, sizeof(buf), "%d月%d日 週%s", tm.tm_mon + 1, tm.tm_mday, WEEKDAY[tm.tm_wday]);
+    set_text(i_date, buf);
+  }
+
+  fmt(num, sizeof(num), m.temp, 1);
+  fmt(num2, sizeof(num2), m.hum, 0);
+  snprintf(buf, sizeof(buf), "%s°  %s%%", num, num2);
+  set_text(i_in, buf);
+  fmt(num, sizeof(num), m.co2, 0);
+  snprintf(buf, sizeof(buf), "室內  CO2 %s", num);
+  set_text(i_in_sub, buf);
+  lv_color_t co2c = C_DIM;
+  if (live && !isnan(m.co2)) co2c = m.co2 >= CO2_ALERT ? C_ALERT : (m.co2 >= CO2_WARN ? C_WARN : C_DIM);
+  set_text_color(i_in_sub, co2c);
+
+  if (m.wx_cond[0] && !isnan(m.out_temp)) {
+    snprintf(buf, sizeof(buf), "%.0f°  %s", m.out_temp, sky_label(m.wx_cond));
+    set_text(i_out, buf);
+  } else {
+    set_text(i_out, "--");
+  }
+
+  // Alerts only when active, same priority as the home pill.
+  const char *a = nullptr;
+  lv_color_t ac = C_ALERT;
+  if (!m.mqtt_connected) a = "離線";
+  else if (m.drain_fault) a = "羅勒排水異常";
+  else if (m.tank_empty) a = "羅勒水箱缺水";
+  else if (!isnan(m.co2) && m.co2 >= CO2_ALERT) a = "CO2 過高 請開窗";
+  else if (m.need_water) { a = "羅勒需澆水"; ac = C_WARN; }
+  if (a) {
+    set_text(i_alert_lbl, a);
+    set_bg(i_alert, ac);
+    lv_obj_update_layout(i_alert_lbl);
+    int w = lv_obj_get_width(i_alert_lbl) + 24;
+    set_width(i_alert, w);
+    lv_obj_set_x(i_alert, (320 - w) / 2);
+  }
+  set_hidden(i_alert, a == nullptr);
 }
 
 static void refresh_header(const Model &m, bool live) {
@@ -178,6 +291,10 @@ static void refresh_header(const Model &m, bool live) {
 
 void home_refresh(const Model &m, bool live) {
   sky_update(m);
+  if (s_idle_on) {
+    refresh_idle(m, live);
+    return;
+  }
   refresh_header(m, live);
 
   char buf[24], num[12];

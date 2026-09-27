@@ -31,8 +31,7 @@
 
 // Backlight duty (0-255) per mode.
 #define BL_ACTIVE 255      // touched, day or night (user's choice 2026-09-27)
-#define BL_DAY_GLANCE 22   // idle during the day: dim glance mode
-#define BL_DAY_ALERT 100   // idle during the day with an alert pending
+#define BL_DAY_IDLE 128    // idle by day: half brightness, big-clock idle screen
 #define BL_NIGHT_IDLE 0    // night: off until touched; alerts do not wake it
 #define IDLE_TIMEOUT_MS 30000
 

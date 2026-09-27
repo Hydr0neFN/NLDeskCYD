@@ -128,7 +128,7 @@ static int backlight_target(const Model &m) {
   if (is_active() && (s_touched || !night)) return BL_ACTIVE;
   // Sleep beats the plant: alerts never light the screen at night.
   if (night) return BL_NIGHT_IDLE;
-  return ui_has_alert(m) ? BL_DAY_ALERT : BL_DAY_GLANCE;
+  return BL_DAY_IDLE;  // idle screen at half brightness (alerts show on it)
 }
 
 void setup() {
@@ -198,12 +198,19 @@ void loop() {
     // the dim glance mode, a still sky at night (moving pixels in a dark
     // bedroom catch the eye).
     bool bench = m.bench_until_ms && (long)(m.bench_until_ms - now) > 0;
-    s_sky_fps = bench ? m.bench_fps : (ui_is_night() ? 0 : (is_active() ? SKY_FPS_ACTIVE : 4));
+    s_sky_fps = bench ? m.bench_fps : (ui_is_night() ? 0 : (is_active() ? SKY_FPS_ACTIVE : 2));
     sky_set_fps(s_sky_fps);
     sky_set_full_redraw(bench && m.bench_full);
 
+    // Idle: back to home with the big-clock idle layer; the touch that wakes
+    // it is swallowed (see my_touch_read_cb), then the normal home returns.
     bool active = is_active();
-    if (was_active && !active) ui_go_home();  // idle always returns to the overview
+    if (was_active && !active) {
+      ui_go_home();
+      ui_set_idle(true);
+    } else if (!was_active && active) {
+      ui_set_idle(false);
+    }
     was_active = active;
   }
 

@@ -85,6 +85,7 @@ int16_t series_last(const Series &s);
 // --- Pages -------------------------------------------------------------------------
 lv_obj_t *home_build();
 void home_refresh(const Model &m, bool live);
+void home_set_idle(bool idle);
 
 lv_obj_t *light_build();
 void light_refresh(const Model &m);

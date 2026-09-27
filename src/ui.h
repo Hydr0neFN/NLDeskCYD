@@ -20,6 +20,9 @@ bool ui_is_night();
 // Back to the home screen (called when the panel goes idle).
 void ui_go_home();
 
+// Idle layer on the home screen (big clock, basic info) instead of the cards.
+void ui_set_idle(bool idle);
+
 // Display colour inversion, owned by main.cpp (it holds the TFT driver). The
 // colour-check page toggles it so both states can be compared on the panel.
 void display_set_inverted(bool inverted);
