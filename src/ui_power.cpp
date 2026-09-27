@@ -3,6 +3,7 @@
 
 #include <Arduino.h>
 
+#include "config.h"
 #include "ui_common.h"
 
 static constexpr int CX = 48, CY = 82, CW = 260, CH = 88;   // line chart
@@ -111,7 +112,13 @@ static void load_bars() {
   top = max(200, (top * 115 / 100 + 199) / 200 * 200);  // kWh x100, 2 kWh steps
   lv_chart_set_axis_range(bars, LV_CHART_AXIS_PRIMARY_Y, 0, top);
   if (n) chart_load(bars, ser_daily, s_daily);
-  char buf[12];
+  char buf[24];
+  // 7-day cost goes into the tab label, so the chart keeps its space.
+  long total = 0;  // kWh x100
+  for (int i = 0; i < n; i++) total += s_daily.v[i];
+  if (n) snprintf(buf, sizeof(buf), "7天 €%.2f", total / 100.0f * PRICE_EUR_KWH);
+  else strlcpy(buf, TABS[1], sizeof(buf));
+  set_text(lv_obj_get_child(tabs[1], 0), buf);
   for (int i = 0; i < 7; i++) {
     if (i < n) {
       snprintf(buf, sizeof(buf), "%.1f", s_daily.v[i] / 100.0f);
@@ -141,7 +148,7 @@ void power_refresh(const Model &m, bool live) {
   float kwh = s_daily.n ? s_daily.v[s_daily.n - 1] / 100.0f : m.house_kwh;
   char buf[32], num[12];
   if (isnan(kwh)) buf[0] = '\0';
-  else snprintf(buf, sizeof(buf), "今日 %.1f kWh", kwh);
+  else snprintf(buf, sizeof(buf), "今日 %.1f kWh · €%.2f", kwh, kwh * PRICE_EUR_KWH);
   set_text(today, buf);
 
   fmt(num, sizeof(num), m.house_w, 0);

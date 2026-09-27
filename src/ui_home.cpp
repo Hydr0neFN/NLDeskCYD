@@ -11,7 +11,7 @@
 static lv_obj_t *h_time, *h_date, *h_dot, *h_pill, *h_pill_lbl, *h_wx;
 static lv_obj_t *r_temp, *r_hum, *r_co2;
 static lv_obj_t *l_state, *l_level, *l_kelvin, *l_bar_fill;
-static lv_obj_t *p_today, *p_house, *p_pc;
+static lv_obj_t *p_today, *p_cost, *p_house, *p_pc;
 static lv_obj_t *b_status, *b_soil, *b_tank;
 
 static const char *const WEEKDAY[7] = {"日", "一", "二", "三", "四", "五", "六"};
@@ -111,8 +111,10 @@ lv_obj_t *home_build() {
 
   // Power: today's kWh lives in the title row, so each value row has room.
   c = nav_card(scr, 4, 138, 154, 98, "用電", Page::POWER);
-  p_today = mk_label(c, &font_noto_16, C_DIM, "");
-  lv_obj_align(p_today, LV_ALIGN_TOP_RIGHT, 0, -3);
+  p_cost = mk_label(c, &font_noto_16, C_ACCENT, "");
+  lv_obj_align(p_cost, LV_ALIGN_TOP_RIGHT, 0, -3);
+  p_today = mk_label(c, &font_noto_16, C_DIM, "今日");
+  lv_obj_add_flag(p_today, LV_OBJ_FLAG_HIDDEN);
   p_house = value_row(c, 18, "全屋", "W");
   p_pc = value_row(c, 50, "電腦", "W");
 
@@ -211,9 +213,16 @@ void home_refresh(const Model &m, bool live) {
   set_bg(l_bar_fill, on ? C_ACCENT : C_STALE);
 
   // power
+  // Today's cost, not kWh: the title row cannot fit both next to "用電"
+  // (agy review 2026-09-27); kWh stays on the power page.
   if (isnan(m.house_kwh)) buf[0] = '\0';
-  else snprintf(buf, sizeof(buf), "今日 %.1f kWh", m.house_kwh);
-  set_text(p_today, buf);
+  else snprintf(buf, sizeof(buf), "€%.2f", m.house_kwh * PRICE_EUR_KWH);
+  if (strcmp(lv_label_get_text(p_cost), buf) != 0) {
+    set_text(p_cost, buf);
+    lv_obj_update_layout(p_cost);
+    lv_obj_align_to(p_today, p_cost, LV_ALIGN_OUT_LEFT_MID, -4, 0);
+  }
+  set_hidden(p_today, buf[0] == '\0');
   fmt(num, sizeof(num), m.house_w, 0);
   set_text(p_house, num);
   set_text_color(p_house, text);

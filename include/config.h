@@ -43,3 +43,7 @@
 // Thresholds.
 #define CO2_WARN 800
 #define CO2_ALERT 1200
+
+// Electricity price (EUR/kWh) for the cost figures. Mirrors
+// number_energy_price in HA's energy config (.storage/energy) -- change both.
+#define PRICE_EUR_KWH 0.272f
