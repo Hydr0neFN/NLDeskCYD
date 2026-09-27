@@ -30,12 +30,14 @@ struct Cond {
   Group group;
 };
 static const Cond CONDS[] = {
-    {"sunny", "晴", G_CLEAR},           {"clear-night", "晴夜", G_CLEAR},
-    {"partlycloudy", "晴時多雲", G_PARTLY}, {"cloudy", "陰", G_CLOUDY},
-    {"rainy", "雨", G_RAIN},            {"pouring", "大雨", G_POUR},
-    {"snowy", "雪", G_SNOW},            {"snowy-rainy", "雨夾雪", G_SNOW},
+    // Header labels: 2-4 characters in CWA-style wording (agy pass 2026-09-27);
+    // single characters (陰, 雨) looked bare next to 晴時多雲.
+    {"sunny", "晴天", G_CLEAR},         {"clear-night", "晴夜", G_CLEAR},
+    {"partlycloudy", "晴時多雲", G_PARTLY}, {"cloudy", "陰天", G_CLOUDY},
+    {"rainy", "降雨", G_RAIN},          {"pouring", "大雨", G_POUR},
+    {"snowy", "降雪", G_SNOW},          {"snowy-rainy", "雨夾雪", G_SNOW},
     {"hail", "冰雹", G_SNOW},           {"lightning", "雷電", G_STORM},
-    {"lightning-rainy", "雷雨", G_STORM}, {"fog", "霧", G_FOG},
+    {"lightning-rainy", "雷陣雨", G_STORM}, {"fog", "有霧", G_FOG},
     {"windy", "強風", G_CLOUDY},        {"windy-variant", "多雲強風", G_CLOUDY},
     {"exceptional", "劇烈天氣", G_STORM},
 };
@@ -77,8 +79,25 @@ const char *sky_short_label(const char *ha_cond) {
   return "--";
 }
 
-// The condition's daytime sky colour (top of its gradient), for colour chips.
-lv_color_t sky_cond_color(const char *ha_cond) { return lv_color_hex(SKY[group_of(ha_cond)][P_DAY][0]); }
+// Chip colour per condition for the forecast grid. Not the sky gradient:
+// cloudy (#5f7185) and rain (#3a4d62) skies are both grey-blue and read as
+// the same colour on a 40 px chip, so each condition gets a distinct hue.
+lv_color_t sky_cond_color(const char *ha_cond) {
+  static const struct {
+    const char *ha;
+    uint32_t rgb;
+  } CHIP[] = {
+      {"sunny", 0xFFC940},       {"clear-night", 0xFFC940},  {"partlycloudy", 0x9CC3E6},
+      {"cloudy", 0x9AA4AE},      {"fog", 0x6B7280},          {"rainy", 0x3B82F6},
+      {"pouring", 0x1D4ED8},     {"lightning", 0xA855F7},    {"lightning-rainy", 0xA855F7},
+      {"snowy", 0xE5F0FF},       {"snowy-rainy", 0xE5F0FF},  {"hail", 0xE5F0FF},
+      {"windy", 0x5EEAD4},       {"windy-variant", 0x5EEAD4}, {"exceptional", 0xF85149},
+  };
+  for (auto &c : CHIP) {
+    if (!strcmp(c.ha, ha_cond)) return lv_color_hex(c.rgb);
+  }
+  return lv_color_hex(0x8B949E);
+}
 
 static Group group_of(const char *ha_cond) {
   for (const Cond &c : CONDS) {
