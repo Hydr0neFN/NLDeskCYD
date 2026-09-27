@@ -407,6 +407,9 @@ static void setup_ota() {
   ArduinoOTA.setHostname(OTA_HOSTNAME);
   ArduinoOTA.setPassword(OTA_PASSWORD);
   ArduinoOTA.onStart([]() {
+    // The OTA erases ~1.2 MB of flash up front, stalling both cores for
+    // seconds; the 5 s loop watchdog (main.cpp) would reboot mid-upload.
+    disableLoopWDT();
     portENTER_CRITICAL(&s_mux);
     s_model.ota_active = true;
     s_model.ota_percent = 0;
@@ -423,6 +426,7 @@ static void setup_ota() {
     portENTER_CRITICAL(&s_mux);
     s_model.ota_active = false;
     portEXIT_CRITICAL(&s_mux);
+    enableLoopWDT();
   });
   ArduinoOTA.begin();
 }
