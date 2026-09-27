@@ -20,6 +20,9 @@ static uint32_t s_seen = 0;
 static bool s_dirty = true;
 
 lv_obj_t *forecast_build() {
+  // Built on every open (ui_show): force a full reload of the cached forecast.
+  s_seen = 0;
+  s_dirty = true;
   lv_obj_t *scr = mk_screen();
   mk_header(scr, "逐時預報");
   s_summary = mk_label(scr, &font_noto_16, C_DIM, "");

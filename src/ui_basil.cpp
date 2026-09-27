@@ -61,6 +61,9 @@ static void on_clear(lv_event_t *) {
 }
 
 lv_obj_t *basil_build() {
+  // Built on every open (ui_show): force a full reload of the cached series.
+  s_seen_soil = s_seen_tank = 0;
+  s_lines_below = s_lines_stop = NAN;
   lv_obj_t *scr = mk_screen();
   mk_header(scr, "羅勒");
   light_btn = mk_button(scr, 200, 2, 116, 32, on_light, nullptr);

@@ -22,9 +22,37 @@ static lv_obj_t *s_screens[(int)Page::COUNT];
 static Page s_page = Page::HOME;
 static lv_obj_t *o_ota, *o_ota_lbl;
 
+// Only the home screen lives permanently. Every other page is built when it is
+// opened and freed when it is left, which keeps ~25 KB+ of heap free (all pages
+// resident left ~67 KB, and a failed LVGL allocation freezes the UI). Each
+// *_build() resets its own cached data, so a rebuilt page reloads everything.
+static lv_obj_t *build_page(Page p) {
+  switch (p) {
+    case Page::HOME: return home_build();
+    case Page::LIGHT: return light_build();
+    case Page::ROOM: return room_build();
+    case Page::POWER: return power_build();
+    case Page::BASIL: return basil_build();
+    case Page::SWATCH: return swatch_build();
+    case Page::FORECAST: return forecast_build();
+    case Page::COUNT: break;
+  }
+  return nullptr;
+}
+
 void ui_show(Page p) {
+  if (p == s_page) return;
+  Page old = s_page;
+  if (!s_screens[(int)p]) s_screens[(int)p] = build_page(p);
   s_page = p;
   lv_screen_load(s_screens[(int)p]);
+  // Free the page being left -- never home. Deferred: ui_show() usually runs
+  // inside a click event of a button ON that page (e.g. back), and deleting
+  // the page synchronously would free the object whose event is running.
+  if (old != Page::HOME && s_screens[(int)old]) {
+    lv_obj_delete_async(s_screens[(int)old]);
+    s_screens[(int)old] = nullptr;
+  }
 }
 
 Page ui_page() { return s_page; }
@@ -35,12 +63,6 @@ void ui_go_home() {
 
 void ui_init() {
   s_screens[(int)Page::HOME] = home_build();
-  s_screens[(int)Page::LIGHT] = light_build();
-  s_screens[(int)Page::ROOM] = room_build();
-  s_screens[(int)Page::POWER] = power_build();
-  s_screens[(int)Page::BASIL] = basil_build();
-  s_screens[(int)Page::SWATCH] = swatch_build();
-  s_screens[(int)Page::FORECAST] = forecast_build();
 
   // OTA overlay on the top layer. Clickable, so touches during a flash are
   // absorbed instead of reaching the (invisible) page underneath.
@@ -50,7 +72,8 @@ void ui_init() {
   lv_obj_center(o_ota_lbl);
   lv_obj_add_flag(o_ota, LV_OBJ_FLAG_HIDDEN);
 
-  ui_show(Page::HOME);
+  s_page = Page::HOME;
+  lv_screen_load(s_screens[(int)Page::HOME]);
 }
 
 bool ui_is_night() {

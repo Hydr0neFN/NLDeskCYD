@@ -2,12 +2,13 @@
 // the PC's share of the draw is visible) or 7-day kWh bars, picked by tabs.
 
 #include <Arduino.h>
+#include <time.h>
 
 #include "config.h"
 #include "ui_common.h"
 
 static constexpr int CX = 48, CY = 82, CW = 260, CH = 88;   // line chart
-static constexpr int BX = 20, BY = 98, BW = 288, BH = 72;   // bar chart
+static constexpr int BX = 20, BY = 115, BW = 288, BH = 56;  // bar chart (detail line above)
 static const char *const TABS[2] = {"24h 功率", "7天用電"};
 static const char *const WEEKDAY[7] = {"日", "一", "二", "三", "四", "五", "六"};
 
@@ -17,7 +18,13 @@ static int s_view = 0;
 static bool s_dirty = true;
 
 static lv_obj_t *tabs[2], *today, *line_view, *bar_view, *chart, *bars, *y_hi, *y_lo;
-static lv_obj_t *bar_val[7], *bar_day[7], *f_house, *f_pc;
+static lv_obj_t *bar_val[7], *bar_day[7], *f_house, *f_pc, *bar_detail;
+static int s_sel = -1;  // selected day bar; -1 = today (the last bar)
+
+static void on_bar(lv_event_t *e) {
+  s_sel = (int)(intptr_t)lv_event_get_user_data(e);
+  s_dirty = true;
+}
 static lv_chart_series_t *ser_house, *ser_pc, *ser_daily;
 
 static void on_tab(lv_event_t *e) {
@@ -37,6 +44,10 @@ static lv_obj_t *mk_view(lv_obj_t *scr) {
 }
 
 lv_obj_t *power_build() {
+  // Built on every open (ui_show): force a full reload of the cached series.
+  s_seen_house = s_seen_pc = s_seen_daily = 0;
+  s_dirty = true;
+  s_sel = -1;
   lv_obj_t *scr = mk_screen();
   mk_header(scr, "用電");
   today = mk_label(scr, &font_noto_16, C_DIM, "");
@@ -80,7 +91,16 @@ lv_obj_t *power_build() {
     lv_obj_set_width(bar_day[i], BW / 7);
     lv_obj_set_style_text_align(bar_day[i], LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_set_pos(bar_day[i], cx, BY + BH + 2);
+    // Tap anywhere in the column (value, bar or weekday) to show that day.
+    lv_obj_t *zone = lv_obj_create(bar_view);
+    lv_obj_remove_style_all(zone);
+    lv_obj_set_pos(zone, cx, BY - 20);
+    lv_obj_set_size(zone, BW / 7, BH + 40);
+    lv_obj_add_flag(zone, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_event_cb(zone, on_bar, LV_EVENT_CLICKED, (void *)(intptr_t)i);
   }
+  bar_detail = mk_label(bar_view, &font_noto_16, C_TEXT, "");
+  lv_obj_set_pos(bar_detail, 12, 77);
 
   lv_obj_t *c = mk_card(scr, 4, 200, 312, 36, nullptr);
   lv_obj_set_style_pad_ver(c, 0, 0);
@@ -119,10 +139,25 @@ static void load_bars() {
   if (n) snprintf(buf, sizeof(buf), "7天 €%.2f", total / 100.0f * PRICE_EUR_KWH);
   else strlcpy(buf, TABS[1], sizeof(buf));
   set_text(lv_obj_get_child(tabs[1], 0), buf);
+  int sel = (s_sel >= 0 && s_sel < n) ? s_sel : n - 1;
+  if (n) {
+    // The daily series ends at tomorrow's midnight; bar i is that day.
+    time_t day = (time_t)s_daily.end - (time_t)(n - sel) * 86400;
+    struct tm tm;
+    localtime_r(&day, &tm);
+    float kwh = s_daily.v[sel] / 100.0f;
+    char d[48];
+    snprintf(d, sizeof(d), "%d/%d 週%s  %.1f kWh · €%.2f%s", tm.tm_mon + 1, tm.tm_mday,
+             WEEKDAY[tm.tm_wday], kwh, kwh * PRICE_EUR_KWH, sel == n - 1 ? " (今)" : "");
+    set_text(bar_detail, d);
+  } else {
+    set_text(bar_detail, "");
+  }
   for (int i = 0; i < 7; i++) {
     if (i < n) {
       snprintf(buf, sizeof(buf), "%.1f", s_daily.v[i] / 100.0f);
       set_text(bar_val[i], buf);
+      set_text_color(bar_val[i], i == sel ? C_ACCENT : C_DIM);
       set_text(bar_day[i], i == n - 1 ? "今" : WEEKDAY[s_daily.dow[i] % 7]);
     } else {
       set_text(bar_val[i], "");

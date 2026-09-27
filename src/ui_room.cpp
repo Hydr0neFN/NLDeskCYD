@@ -28,6 +28,9 @@ static void on_tab(lv_event_t *e) {
 }
 
 lv_obj_t *room_build() {
+  // Built on every open (ui_show): force a full reload of the cached series.
+  for (int i = 0; i < M_COUNT; i++) s_seen[i] = 0;
+  s_dirty = true;
   lv_obj_t *scr = mk_screen();
   mk_header(scr, "室內環境");
   co2_status = mk_label(scr, &font_noto_16, C_DIM, "");
