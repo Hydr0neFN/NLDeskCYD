@@ -434,6 +434,15 @@ static void setup_ota() {
 static float s_perf_fps = 0, s_perf_frame_ms = 0, s_perf_flush_ms = 0;
 static int s_perf_sky = 0;
 
+static int s_ldr_raw = -1, s_ldr_bl = 0;
+
+void net_set_ldr(int raw, int backlight) {
+  portENTER_CRITICAL(&s_mux);
+  s_ldr_raw = raw;
+  s_ldr_bl = backlight;
+  portEXIT_CRITICAL(&s_mux);
+}
+
 void net_set_perf(float fps, float frame_ms, float flush_ms, int sky_fps) {
   portENTER_CRITICAL(&s_mux);
   s_perf_fps = fps;
@@ -465,7 +474,7 @@ static void net_task(void *) {
   s_mqtt.setKeepAlive(30);
 
   bool ota_started = false;
-  unsigned long next_try = 0, next_rssi = 0, next_perf = 0;
+  unsigned long next_try = 0, next_rssi = 0, next_perf = 0, next_ldr = 0;
 
   for (;;) {
     unsigned long now = millis();
@@ -491,6 +500,19 @@ static void net_task(void *) {
           const char *t = c.target == CmdTarget::BASIL ? TOPIC_CMD_BASIL : TOPIC_CMD_LIGHTBAR;
           Serial.printf("[MQTT] %s %s\n", t, c.json);
           s_mqtt.publish(t, c.json, false);
+        }
+        if ((long)(now - next_ldr) >= 0) {
+          next_ldr = now + 2000;
+          int raw, bl;
+          portENTER_CRITICAL(&s_mux);
+          raw = s_ldr_raw;
+          bl = s_ldr_bl;
+          portEXIT_CRITICAL(&s_mux);
+          if (raw >= 0) {
+            char l[48];
+            snprintf(l, sizeof(l), "{\"raw\":%d,\"bl\":%d}", raw, bl);
+            s_mqtt.publish(TOPIC_PANEL "ldr", l, false);
+          }
         }
         if ((long)(now - next_perf) >= 0) {
           next_perf = now + 10000;

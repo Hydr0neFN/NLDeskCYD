@@ -16,6 +16,7 @@
 #define XPT2046_MISO 39
 #define XPT2046_CLK 25
 #define XPT2046_CS 33
+#define LDR_PIN 34  // front light sensor (LDR R21)
 
 static TFT_eSPI tft = TFT_eSPI();
 static SPIClass touchscreenSpi = SPIClass(VSPI);
@@ -149,6 +150,10 @@ void setup() {
   s_inverted = s_prefs.getBool("invert", DEFAULT_INVERTED);
   tft.invertDisplay(s_inverted);
 
+  // Front LDR on GPIO34 (input-only, ADC1). The stock divider (2 x 1 MOhm)
+  // gives only a small voltage, so use the most sensitive range (0 dB,
+  // ~0-1.1 V). Evaluation only for now: raw values go to cyd/nl/panel/ldr.
+  analogSetPinAttenuation(LDR_PIN, ADC_0db);
   ledcSetup(BACKLIGHT_PWM_CH, BACKLIGHT_PWM_FREQ, BACKLIGHT_PWM_RES);
   ledcAttachPin(TFT_BL, BACKLIGHT_PWM_CH);
   ledcWrite(BACKLIGHT_PWM_CH, 0);
@@ -180,6 +185,14 @@ void loop() {
   static bool was_active = true;
   static Model m;
   unsigned long now = millis();
+
+  static unsigned long last_ldr = 0;
+  if (now - last_ldr >= 500) {
+    last_ldr = now;
+    uint32_t sum = 0;
+    for (int i = 0; i < 16; i++) sum += analogRead(LDR_PIN);
+    net_set_ldr(sum / 16, s_bl_duty);
+  }
 
   if (now - last_perf >= 10000) {
     float secs = (now - last_perf) / 1000.0f;

@@ -85,3 +85,7 @@ void net_send(CmdTarget t, const char *json);
 // Display performance, published to cyd/nl/panel/perf every 10 s for A/B
 // testing display changes. Safe from core 1.
 void net_set_perf(float fps, float frame_ms, float flush_ms, int sky_fps);
+
+// Front LDR (GPIO34) raw ADC average and the backlight duty at that moment,
+// published to cyd/nl/panel/ldr every 2 s while evaluating the sensor.
+void net_set_ldr(int raw, int backlight);
