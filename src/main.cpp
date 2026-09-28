@@ -207,11 +207,12 @@ void loop() {
     net_snapshot(m);
     ui_refresh(m);
     s_bl_target = backlight_target(m);
-    // Sky animation follows the backlight: full rate in use, a slow drift in
-    // the dim glance mode, a still sky at night (moving pixels in a dark
+    // Sky animation follows the backlight: full rate in use, fewer frames on
+    // the idle screen, a still sky at night (moving pixels in a dark
     // bedroom catch the eye).
     bool bench = m.bench_until_ms && (long)(m.bench_until_ms - now) > 0;
-    s_sky_fps = bench ? m.bench_fps : (ui_is_night() ? 0 : (is_active() ? SKY_FPS_ACTIVE : 2));
+    s_sky_fps = bench ? m.bench_fps : (ui_is_night() ? 0 : (is_active() ? SKY_FPS_ACTIVE : SKY_FPS_IDLE));
+    sky_set_cloud_speed(is_active() ? SKY_CLOUD_ACTIVE : SKY_CLOUD_IDLE);
     sky_set_fps(s_sky_fps);
     sky_set_full_redraw(bench && m.bench_full);
 

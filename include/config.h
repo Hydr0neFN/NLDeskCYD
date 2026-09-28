@@ -38,6 +38,12 @@
 // Home sky frame rate while the panel is in use (see README: measured ~15 ms
 // per frame, so the limit is LVGL rendering, not the SPI bus).
 #define SKY_FPS_ACTIVE 30
+// Idle screen: the sky is the show, so clouds move fast (x SKY_CLOUD_IDLE) and
+// need enough frames to glide. In use they crawl (x SKY_CLOUD_ACTIVE) so the
+// background does not pull the eye from the cards. User, 2026-09-28.
+#define SKY_FPS_IDLE 12
+#define SKY_CLOUD_ACTIVE 0.4f
+#define SKY_CLOUD_IDLE 2.5f
 
 // Thresholds.
 #define CO2_WARN 800

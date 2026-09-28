@@ -128,10 +128,11 @@ static lv_obj_t *s_scr, *s_sun, *s_glow, *s_moon, *s_moon_shadow, *s_flash;
 static lv_obj_t *s_drops[N_DROPS], *s_stars[N_STARS], *s_clouds[N_CLOUDS], *s_fog[N_FOG];
 static int16_t s_dx[N_DROPS], s_dy[N_DROPS];  // px per 50 ms (tuned at 20 fps)
 static float s_fx[N_DROPS], s_fy[N_DROPS];
-static int16_t s_cloud_x[N_CLOUDS];
+static float s_cloud_x[N_CLOUDS];
+static float s_cloud_speed = 1.0f;
 
 // Parallax: far clouds are small, faint, high and slow; near ones big,
-// brighter, lower and faster. ms = time per 1 px of drift.
+// brighter, lower and faster. ms = time per 1 px of drift at speed 1.
 struct CloudLayer {
   int16_t y, w, h;
   lv_opa_t opa;
@@ -142,7 +143,6 @@ static const CloudLayer CLOUD_LAYERS[N_CLOUDS] = {
     {62, 140, 44, LV_OPA_20, 180},  // middle
     {140, 196, 62, 64, 100},        // near (25 %)
 };
-static unsigned long s_cloud_last[N_CLOUDS];
 static int s_drop_count = 0;
 static bool s_snow = false, s_storm = false;
 static Group s_group = G_COUNT;
@@ -297,7 +297,7 @@ void sky_build(lv_obj_t *scr) {
   for (int i = 0; i < N_CLOUDS; i++) {
     const CloudLayer &L = CLOUD_LAYERS[i];
     s_cloud_x[i] = i * 110 - 30;
-    s_clouds[i] = blob(s_cloud_x[i], L.y, L.w, L.h, 0xFFFFFF, L.opa);
+    s_clouds[i] = blob((int)s_cloud_x[i], L.y, L.w, L.h, 0xFFFFFF, L.opa);
   }
   for (int i = 0; i < N_FOG; i++) {
     s_fog[i] = mk_box(scr, i * 90 - 40, 56 + i * 62, 220, 18, lv_color_white());
@@ -383,6 +383,8 @@ static void configure(Group g, Phase ph) {
 static bool s_full_redraw = false;
 void sky_set_full_redraw(bool on) { s_full_redraw = on; }
 
+void sky_set_cloud_speed(float k) { s_cloud_speed = k; }
+
 void sky_set_fps(int fps) {
   if (fps == s_fps || !s_timer) return;
   s_fps = fps;
@@ -428,13 +430,14 @@ static void sky_frame(lv_timer_t *) {
     lv_obj_set_pos(s_drops[i], (int)s_fx[i], (int)s_fy[i]);
   }
 
-  // clouds drift 1 px per layer interval (parallax), independent of frame rate
+  // clouds drift at 1 px per layer interval x s_cloud_speed (parallax), in
+  // real time; set_x only when the whole-pixel position changes
   for (int i = 0; i < N_CLOUDS; i++) {
-    if (now - s_cloud_last[i] < CLOUD_LAYERS[i].ms) continue;
-    s_cloud_last[i] = now;
     if (lv_obj_has_flag(s_clouds[i], LV_OBJ_FLAG_HIDDEN)) continue;
-    if (++s_cloud_x[i] > 330) s_cloud_x[i] = -CLOUD_LAYERS[i].w - 10;
-    lv_obj_set_x(s_clouds[i], s_cloud_x[i]);
+    int old_px = (int)s_cloud_x[i];
+    s_cloud_x[i] += k * 50.0f / CLOUD_LAYERS[i].ms * s_cloud_speed;
+    if (s_cloud_x[i] > 330) s_cloud_x[i] = -CLOUD_LAYERS[i].w - 10;
+    if ((int)s_cloud_x[i] != old_px) lv_obj_set_x(s_clouds[i], (int)s_cloud_x[i]);
   }
 
   // fog bands drift 1 px every 150 ms
