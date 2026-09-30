@@ -79,7 +79,8 @@ brings it into range. Idle by day (30 s untouched) the home screen swaps its
 header and cards for an idle layer at half that level: a big clock,
 the date, indoor temperature / humidity / CO2 and the outdoor weather, plus an
 alert pill only while something needs attention; the sky keeps drifting at
-12 fps behind a 50 % scrim. Fully dark 00:30-07:30. A touch on a dim screen only
+12 fps behind a 50 % scrim. Dark 00:30-07:30; a touch then lights it at the room's level (dim with the
+lights off). A touch on a dim screen only
 wakes it.
 
 ## Build

@@ -29,19 +29,22 @@
 #define NIGHT_START_MIN (0 * 60 + 30)
 #define NIGHT_END_MIN (7 * 60 + 30)
 
-// Backlight duty (0-255). By day the level follows the front LDR (see
-// main.cpp): full in bright daylight down to BL_AUTO_MIN in a dim room, and
-// the idle screen runs at half of that. Night keeps its own rule: off, and a
-// touch lights it fully (user's choice 2026-09-27, kept 2026-09-30).
-#define BL_ACTIVE 255      // bright day, and any touch at night
-#define BL_AUTO_MIN 64     // in use, dimmest room by day (idle: half of it)
+// Backlight duty (0-255). The in-use level follows the front LDR (see
+// main.cpp): full in bright daylight, BL_AUTO_MIN in a dim room, BL_DARK with
+// the lights off. By day the idle screen runs at half of it. Night
+// (00:30-07:30) is off until touched; a touch then uses the same LDR level, so
+// a dark bedroom gets BL_DARK instead of a blast (user, 2026-09-30).
+#define BL_ACTIVE 255      // in use, bright daylight
+#define BL_AUTO_MIN 64     // in use, dim room (idle: half of it)
+#define BL_DARK 32         // in use, lights off (a touch at night)
 #define BL_NIGHT_IDLE 0    // night: off until touched; alerts do not wake it
 
 // Front LDR raw (higher = darker) mapped to the backlight, on a log scale.
 // From a 3-day log in the printed case (2026-09-27..30): daylight 0-150,
 // lamp-lit or overcast 200-900, dusk / curtains closed 1000-3800, dark 4095.
 #define LDR_BRIGHT 100     // at or below: BL_ACTIVE
-#define LDR_DIM 3500       // at or above: BL_AUTO_MIN
+#define LDR_DIM 3500       // BL_AUTO_MIN
+#define LDR_DARK 4000      // at or above (the ADC saturates at 4095): BL_DARK
 #define LDR_SMOOTH 0.06f   // EMA weight per 500 ms sample (~8 s time constant)
 #define IDLE_TIMEOUT_MS 30000
 

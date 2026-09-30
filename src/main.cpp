@@ -83,23 +83,30 @@ static bool is_active() { return millis() - s_last_touch_ms < IDLE_TIMEOUT_MS; }
 // darker. Bare, it read 0 in any daylight; inside the case the 3.5 mm hole
 // over it acts as an aperture and the whole 0-4095 range is used. Its
 // resistance is a power law of lux, so the level is interpolated on log(raw),
-// smoothed so a hand passing over it does not pump the backlight.
+// smoothed so a hand passing over it does not pump the backlight. Two
+// segments: daylight -> dim room, then dim room -> lights off.
 static float s_ldr_log = NAN;
-static int s_auto_level = BL_ACTIVE;  // backlight for the current room light, by day
+static int s_auto_level = BL_ACTIVE;  // in-use backlight for the current room light
 
 static void ldr_sample() {
   uint32_t sum = 0;
   for (int i = 0; i < 16; i++) sum += analogRead(LDR_PIN);
   int raw = sum / 16;
-  float l = logf(constrain(raw, LDR_BRIGHT, LDR_DIM));
+  float l = logf(constrain(raw, LDR_BRIGHT, LDR_DARK));
   s_ldr_log = isnan(s_ldr_log) ? l : s_ldr_log + LDR_SMOOTH * (l - s_ldr_log);
-  float f = (s_ldr_log - logf(LDR_BRIGHT)) / (logf(LDR_DIM) - logf(LDR_BRIGHT));
-  s_auto_level = BL_ACTIVE - lroundf(f * (BL_ACTIVE - BL_AUTO_MIN));
+  static const float L_BRIGHT = logf(LDR_BRIGHT), L_DIM = logf(LDR_DIM), L_DARK = logf(LDR_DARK);
+  if (s_ldr_log <= L_DIM) {
+    float f = (s_ldr_log - L_BRIGHT) / (L_DIM - L_BRIGHT);
+    s_auto_level = BL_ACTIVE - lroundf(f * (BL_ACTIVE - BL_AUTO_MIN));
+  } else {
+    float f = (s_ldr_log - L_DIM) / (L_DARK - L_DIM);
+    s_auto_level = BL_AUTO_MIN - lroundf(f * (BL_AUTO_MIN - BL_DARK));
+  }
   net_set_ldr(raw, s_bl_duty);
 }
 
-// Backlight while in use: from the LDR by day, full after a touch at night.
-static int active_level() { return ui_is_night() ? BL_ACTIVE : s_auto_level; }
+// Backlight while in use, day or night (after a touch): from the LDR.
+static int active_level() { return s_auto_level; }
 
 static void my_touch_read_cb(lv_indev_t *, lv_indev_data_t *data) {
   if (touchscreen.tirqTouched() && touchscreen.touched()) {
@@ -148,7 +155,8 @@ static int backlight_target(const Model &m) {
   bool night = ui_is_night();
   if (m.ota_active) return night ? BL_NIGHT_IDLE : s_auto_level;
   // Boot counts as activity by day (the panel shows it is alive) but not at
-  // night: a reboot must not light the bedroom. A real touch lights it fully.
+  // night: a reboot must not light the bedroom. A real touch lights it at the
+  // room's level.
   if (is_active() && (s_touched || !night)) return active_level();
   // Sleep beats the plant: alerts never light the screen at night.
   if (night) return BL_NIGHT_IDLE;
