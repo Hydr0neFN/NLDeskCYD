@@ -78,12 +78,35 @@ static unsigned long s_release_start = 0;
 
 static bool is_active() { return millis() - s_last_touch_ms < IDLE_TIMEOUT_MS; }
 
+// --- Ambient light (front LDR) ----------------------------------------------
+// R21 pulls GPIO34 to GND against a 2 x 1 MOhm pull-up, so higher raw means
+// darker. Bare, it read 0 in any daylight; inside the case the 3.5 mm hole
+// over it acts as an aperture and the whole 0-4095 range is used. Its
+// resistance is a power law of lux, so the level is interpolated on log(raw),
+// smoothed so a hand passing over it does not pump the backlight.
+static float s_ldr_log = NAN;
+static int s_auto_level = BL_ACTIVE;  // backlight for the current room light, by day
+
+static void ldr_sample() {
+  uint32_t sum = 0;
+  for (int i = 0; i < 16; i++) sum += analogRead(LDR_PIN);
+  int raw = sum / 16;
+  float l = logf(constrain(raw, LDR_BRIGHT, LDR_DIM));
+  s_ldr_log = isnan(s_ldr_log) ? l : s_ldr_log + LDR_SMOOTH * (l - s_ldr_log);
+  float f = (s_ldr_log - logf(LDR_BRIGHT)) / (logf(LDR_DIM) - logf(LDR_BRIGHT));
+  s_auto_level = BL_ACTIVE - lroundf(f * (BL_ACTIVE - BL_AUTO_MIN));
+  net_set_ldr(raw, s_bl_duty);
+}
+
+// Backlight while in use: from the LDR by day, full after a touch at night.
+static int active_level() { return ui_is_night() ? BL_ACTIVE : s_auto_level; }
+
 static void my_touch_read_cb(lv_indev_t *, lv_indev_data_t *data) {
   if (touchscreen.tirqTouched() && touchscreen.touched()) {
     s_release_start = 0;
     // Swallow the touch that wakes a dark or dimmed screen -- judged by the
     // actual backlight, so it also covers a freshly booted panel at night.
-    if (!is_active() || s_bl_duty < BL_ACTIVE / 2) s_swallow = true;
+    if (!is_active() || s_bl_duty < active_level() / 2) s_swallow = true;
     s_last_touch_ms = millis();
     s_touched = true;
     if (s_swallow) {
@@ -123,13 +146,13 @@ bool display_is_inverted() { return s_inverted; }
 
 static int backlight_target(const Model &m) {
   bool night = ui_is_night();
-  if (m.ota_active) return night ? BL_NIGHT_IDLE : BL_ACTIVE;
+  if (m.ota_active) return night ? BL_NIGHT_IDLE : s_auto_level;
   // Boot counts as activity by day (the panel shows it is alive) but not at
   // night: a reboot must not light the bedroom. A real touch lights it fully.
-  if (is_active() && (s_touched || !night)) return BL_ACTIVE;
+  if (is_active() && (s_touched || !night)) return active_level();
   // Sleep beats the plant: alerts never light the screen at night.
   if (night) return BL_NIGHT_IDLE;
-  return BL_DAY_IDLE;  // idle screen at half brightness (alerts show on it)
+  return s_auto_level / 2;  // idle screen at half the room level (alerts show on it)
 }
 
 void setup() {
@@ -152,8 +175,10 @@ void setup() {
 
   // Front LDR on GPIO34 (input-only, ADC1). The stock divider (2 x 1 MOhm)
   // gives only a small voltage, so use the most sensitive range (0 dB,
-  // ~0-1.1 V). Evaluation only for now: raw values go to cyd/nl/panel/ldr.
+  // ~0-1.1 V). Sampled once now so the first backlight level already fits
+  // the room; raw values also go to cyd/nl/panel/ldr for tuning.
   analogSetPinAttenuation(LDR_PIN, ADC_0db);
+  ldr_sample();
   ledcSetup(BACKLIGHT_PWM_CH, BACKLIGHT_PWM_FREQ, BACKLIGHT_PWM_RES);
   ledcAttachPin(TFT_BL, BACKLIGHT_PWM_CH);
   ledcWrite(BACKLIGHT_PWM_CH, 0);
@@ -189,9 +214,7 @@ void loop() {
   static unsigned long last_ldr = 0;
   if (now - last_ldr >= 500) {
     last_ldr = now;
-    uint32_t sum = 0;
-    for (int i = 0; i < 16; i++) sum += analogRead(LDR_PIN);
-    net_set_ldr(sum / 16, s_bl_duty);
+    ldr_sample();
   }
 
   if (now - last_perf >= 10000) {

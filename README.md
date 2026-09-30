@@ -73,11 +73,13 @@ and faster (nearer) drops are brighter; three cloud layers drift at different
 speeds and sizes for parallax; the moon shows its real phase, from the
 sun-moon elongation, as a sky-coloured disc clipped to the moon.
 
-Backlight: full while touched. Idle by day (30 s untouched) the home screen
-swaps its header and cards for an idle layer at half brightness: a big clock,
+Backlight: by day it follows the front light sensor (LDR), from full in
+daylight down to a quarter in a dim room; the case's hole over the LDR is what
+brings it into range. Idle by day (30 s untouched) the home screen swaps its
+header and cards for an idle layer at half that level: a big clock,
 the date, indoor temperature / humidity / CO2 and the outdoor weather, plus an
 alert pill only while something needs attention; the sky keeps drifting at
-2 fps behind a 40 % scrim. Fully dark 00:30-07:30. A touch on a dim screen only
+12 fps behind a 50 % scrim. Fully dark 00:30-07:30. A touch on a dim screen only
 wakes it.
 
 ## Build

@@ -29,10 +29,20 @@
 #define NIGHT_START_MIN (0 * 60 + 30)
 #define NIGHT_END_MIN (7 * 60 + 30)
 
-// Backlight duty (0-255) per mode.
-#define BL_ACTIVE 255      // touched, day or night (user's choice 2026-09-27)
-#define BL_DAY_IDLE 128    // idle by day: half brightness, big-clock idle screen
+// Backlight duty (0-255). By day the level follows the front LDR (see
+// main.cpp): full in bright daylight down to BL_AUTO_MIN in a dim room, and
+// the idle screen runs at half of that. Night keeps its own rule: off, and a
+// touch lights it fully (user's choice 2026-09-27, kept 2026-09-30).
+#define BL_ACTIVE 255      // bright day, and any touch at night
+#define BL_AUTO_MIN 64     // in use, dimmest room by day (idle: half of it)
 #define BL_NIGHT_IDLE 0    // night: off until touched; alerts do not wake it
+
+// Front LDR raw (higher = darker) mapped to the backlight, on a log scale.
+// From a 3-day log in the printed case (2026-09-27..30): daylight 0-150,
+// lamp-lit or overcast 200-900, dusk / curtains closed 1000-3800, dark 4095.
+#define LDR_BRIGHT 100     // at or below: BL_ACTIVE
+#define LDR_DIM 3500       // at or above: BL_AUTO_MIN
+#define LDR_SMOOTH 0.06f   // EMA weight per 500 ms sample (~8 s time constant)
 #define IDLE_TIMEOUT_MS 30000
 
 // Home sky frame rate while the panel is in use (see README: measured ~15 ms
