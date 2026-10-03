@@ -223,6 +223,29 @@ static bool place(lv_obj_t *o, AltAz p, int dia, bool allowed) {
 }
 
 static float s_sun_alt = NAN;
+
+// Sky colour at screen row y (the screen's vertical gradient, top -> bottom).
+static lv_color_t sky_at(int y) {
+  const uint32_t *c = SKY[s_group][s_phase];
+  int mix = constrain(y, 0, 240) * 255 / 240;
+  return lv_color_mix(lv_color_hex(c[1]), lv_color_hex(c[0]), mix);
+}
+
+// The phase shadow must be invisible against the sky, both where it covers the
+// moon's dark limb and where it spills past the moon's circle into the corners
+// of its bounding box. A flat colour showed as a ghost disc against the
+// gradient and its 90 % opacity let the craters through (user photo
+// 2026-10-03), so it is opaque and carries the same gradient over its rows.
+static void shadow_match_sky() {
+  if (s_group == G_COUNT) return;
+  int y = lv_obj_get_y(s_moon);
+  lv_color_t top = sky_at(y), bot = sky_at(y + MOON_D);
+  if (!lv_color_eq(lv_obj_get_style_bg_color(s_moon_shadow, LV_PART_MAIN), top) ||
+      !lv_color_eq(lv_obj_get_style_bg_grad_color(s_moon_shadow, LV_PART_MAIN), bot)) {
+    lv_obj_set_style_bg_color(s_moon_shadow, top, 0);
+    lv_obj_set_style_bg_grad_color(s_moon_shadow, bot, 0);
+  }
+}
 static unsigned long s_next_astro = 0;
 
 // Recomputes sun and moon positions (every 30 s; they move ~0.1 deg in that time).
@@ -240,6 +263,7 @@ static void update_bodies(bool force) {
   place(s_sun, sun, SUN_D, clear);
   place(s_glow, sun, GLOW_D, clear);
   place(s_moon, moon, MOON_D, clear);
+  shadow_match_sky();
 
   // Phase: a sky-coloured disc slides across the moon. Illuminated fraction
   // f = (1 - cos elongation) / 2; waxing (elongation < 180) is lit on the
@@ -281,16 +305,16 @@ void sky_build(lv_obj_t *scr) {
   };
   for (auto &m : MARIA) disc(s_moon, MOON_D * m[0] / 100, MOON_D * m[1] / 100, MOON_D * m[2] / 100, 0xB9B6A9, LV_OPA_70);
   for (auto &c : CRATERS) disc(s_moon, MOON_D * c[0] / 100, MOON_D * c[1] / 100, MOON_D * c[2] / 100, 0xA19E92, LV_OPA_80);
-  // Phase shadow, last child so it covers the maria. Its colour follows the
-  // sky (set in configure()), so the part that spills past the moon's edge
-  // (children are clipped to the moon's bounding box, not its circle) blends
-  // into the sky. Do NOT use clip_corner on the moon: it renders the 180 px
+  // Phase shadow, last child so it covers the maria. Opaque, coloured with
+  // the sky gradient behind it (shadow_match_sky), so the part that spills
+  // past the moon's edge (children are clipped to the moon's bounding box,
+  // not its circle) blends into the sky. Do NOT use clip_corner on the moon: it renders the 180 px
   // disc through a temporary layer (64-130 KB) that does not fit in the free
   // heap, and the failed allocation trips LV_ASSERT_MALLOC -- an endless
   // loop that froze the UI on 2026-09-27.
   s_moon_shadow = mk_box(s_moon, 0, 0, MOON_D, MOON_D, lv_color_hex(0x0B1530));
   lv_obj_set_style_radius(s_moon_shadow, LV_RADIUS_CIRCLE, 0);
-  lv_obj_set_style_bg_opa(s_moon_shadow, LV_OPA_90, 0);
+  lv_obj_set_style_bg_grad_dir(s_moon_shadow, LV_GRAD_DIR_VER, 0);
   for (int i = 0; i < N_STARS; i++) {
     s_stars[i] = blob(random(0, 316), random(0, 150), 2, 2, 0xFFFFFF, LV_OPA_COVER);
   }
@@ -344,8 +368,6 @@ static void configure(Group g, Phase ph) {
   const uint32_t *c = SKY[g][ph];
   lv_obj_set_style_bg_color(s_scr, lv_color_hex(c[0]), 0);
   lv_obj_set_style_bg_grad_color(s_scr, lv_color_hex(c[1]), 0);
-  // The moon's dark side takes the sky's mid colour so it blends in.
-  lv_obj_set_style_bg_color(s_moon_shadow, lv_color_mix(lv_color_hex(c[0]), lv_color_hex(c[1]), 128), 0);
 
   bool night = ph == P_NIGHT;
   bool light_sky = g == G_CLEAR || g == G_PARTLY;
