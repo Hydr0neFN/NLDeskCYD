@@ -224,6 +224,32 @@ static bool place(lv_obj_t *o, AltAz p, int dia, bool allowed) {
 
 static float s_sun_alt = NAN;
 
+// Half-visible body: every disc's own bg_opa is halved (the base opacity is
+// kept in user_data at build time). Never the object-level `opa` style: on a
+// parent with children LVGL renders it through a temporary layer, the same
+// heap trap as clip_corner (see the moon in sky_build). The phase shadow
+// stays opaque so the dark limb keeps hiding the disc.
+static void body_fade(lv_obj_t *body, bool half) {
+  auto apply = [half](lv_obj_t *o) {
+    lv_opa_t base = (lv_opa_t)(uintptr_t)lv_obj_get_user_data(o);
+    lv_opa_t want = half ? base / 2 : base;
+    if (lv_obj_get_style_bg_opa(o, LV_PART_MAIN) != want) lv_obj_set_style_bg_opa(o, want, 0);
+  };
+  apply(body);
+  for (uint32_t i = 0; i < lv_obj_get_child_count(body); i++) {
+    lv_obj_t *c = lv_obj_get_child(body, i);
+    if (c != s_moon_shadow) apply(c);
+  }
+}
+
+static void body_remember_opa(lv_obj_t *body) {
+  lv_obj_set_user_data(body, (void *)(uintptr_t)lv_obj_get_style_bg_opa(body, LV_PART_MAIN));
+  for (uint32_t i = 0; i < lv_obj_get_child_count(body); i++) {
+    lv_obj_t *c = lv_obj_get_child(body, i);
+    lv_obj_set_user_data(c, (void *)(uintptr_t)lv_obj_get_style_bg_opa(c, LV_PART_MAIN));
+  }
+}
+
 // Sky colour at screen row y (the screen's vertical gradient, top -> bottom).
 static lv_color_t sky_at(int y) {
   const uint32_t *c = SKY[s_group][s_phase];
@@ -264,6 +290,19 @@ static void update_bodies(bool force) {
   place(s_glow, sun, GLOW_D, clear);
   place(s_moon, moon, MOON_D, clear);
   shadow_match_sky();
+  // Whichever body owns the time of day is drawn in front where they overlap:
+  // the sun while it is up, the moon after sunset (user, 2026-10-03).
+  // Order is glow, sun, moon by night and moon, glow, sun by day; only
+  // reordered on a change, as a move repaints both discs.
+  bool moon_front = lv_obj_get_index(s_moon) > lv_obj_get_index(s_sun);
+  bool sun_up = sun.alt > 0;
+  if (sun_up && moon_front) lv_obj_move_to_index(s_moon, lv_obj_get_index(s_glow));
+  if (!sun_up && !moon_front) lv_obj_move_to_index(s_moon, lv_obj_get_index(s_sun));
+  // ...and the other one is only half visible: a pale day moon, a faded sun
+  // below the horizon at dusk.
+  body_fade(s_moon, sun_up);
+  body_fade(s_sun, !sun_up);
+  body_fade(s_glow, !sun_up);
 
   // Phase: a sky-coloured disc slides across the moon. Illuminated fraction
   // f = (1 - cos elongation) / 2; waxing (elongation < 180) is lit on the
@@ -315,6 +354,9 @@ void sky_build(lv_obj_t *scr) {
   s_moon_shadow = mk_box(s_moon, 0, 0, MOON_D, MOON_D, lv_color_hex(0x0B1530));
   lv_obj_set_style_radius(s_moon_shadow, LV_RADIUS_CIRCLE, 0);
   lv_obj_set_style_bg_grad_dir(s_moon_shadow, LV_GRAD_DIR_VER, 0);
+  body_remember_opa(s_glow);
+  body_remember_opa(s_sun);
+  body_remember_opa(s_moon);
   for (int i = 0; i < N_STARS; i++) {
     s_stars[i] = blob(random(0, 316), random(0, 150), 2, 2, 0xFFFFFF, LV_OPA_COVER);
   }
