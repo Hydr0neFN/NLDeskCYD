@@ -4,6 +4,9 @@
 #include <XPT2046_Touchscreen.h>
 #include <lvgl.h>
 #include <Preferences.h>
+#ifdef BLE_NODE_NAME
+#include <esp_bt.h>
+#endif
 
 #include "config.h"
 #include "net.h"
@@ -22,7 +25,8 @@ static TFT_eSPI tft = TFT_eSPI();
 static SPIClass touchscreenSpi = SPIClass(VSPI);
 static XPT2046_Touchscreen touchscreen(XPT2046_CS, XPT2046_IRQ);
 
-static constexpr int DRAW_BUF_LINES = 64;
+// 24 lines = 15 KB static (was 64 = 40 KB); the freed RAM pays for the BLE scanner.
+static constexpr int DRAW_BUF_LINES = 24;
 // LVGL 9 asserts on an unaligned draw buffer and halts in setup().
 static uint16_t draw_buf[320 * DRAW_BUF_LINES] __attribute__((aligned(4)));
 
@@ -167,6 +171,13 @@ void setup() {
   Serial.begin(115200);
   delay(200);
   Serial.println("NLDeskCYD boot");
+#ifdef BLE_NODE_NAME
+  // Linking NimBLE stops the Arduino core releasing the BT memory at start-up; hand the
+  // classic-BT half back now, before LVGL and WiFi fragment the heap.
+  Serial.printf("heap before bt release %u\n", ESP.getFreeHeap());
+  esp_bt_controller_mem_release(ESP_BT_MODE_CLASSIC_BT);
+  Serial.printf("heap after classic release %u\n", ESP.getFreeHeap());
+#endif
 
   net_start();  // own task, pinned to core 0
 

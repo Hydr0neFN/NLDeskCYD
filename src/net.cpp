@@ -3,6 +3,9 @@
 #include <ArduinoOTA.h>
 #include <PubSubClient.h>
 #include <WiFi.h>
+
+#include "ble_presence.h"
+#include "csi_presence.h"
 #include <math.h>
 #include <time.h>
 
@@ -276,6 +279,8 @@ static void apply_forecast(const char *json) {
 }
 
 static void on_message(char *topic, uint8_t *payload, unsigned int len) {
+  if (csipresence::onMessage(topic, payload, len)) return;  // presence/<node>/cmd csi_* (before BLE)
+  if (blepresence::onMessage(topic, payload, len)) return;  // presence/... (IRK config, cmd)
   static constexpr size_t BASE_LEN = sizeof(TOPIC_BASE) - 1;
   static constexpr char HIST[] = "hist/";
   if (strncmp(topic, TOPIC_BASE, BASE_LEN) != 0) return;
@@ -394,6 +399,8 @@ static bool mqtt_connect() {
   s_mqtt.subscribe(TOPIC_BASE "weather", 1);
   s_mqtt.subscribe(TOPIC_BASE "forecast", 1);
   s_mqtt.subscribe(TOPIC_PANEL "bench", 0);
+  blepresence::subscribe([](const char *t) { s_mqtt.subscribe(t); });
+  csipresence::subscribe([](const char *t) { s_mqtt.subscribe(t); });
   return true;
 }
 
@@ -403,6 +410,13 @@ static void set_connected(bool c) {
   portEXIT_CRITICAL(&s_mux);
 }
 
+// Stop/resume the BLE scanner through its own command path ("off"/"on" on presence/cyd/cmd).
+static void ble_scan_pause(bool pause) {
+  const char *cmd = pause ? "off" : "on";
+  blepresence::onMessage("presence/" BLE_NODE_NAME "/cmd", (const uint8_t *)cmd, strlen(cmd));
+  csipresence::setPaused(pause);
+}
+
 static void setup_ota() {
   ArduinoOTA.setHostname(OTA_HOSTNAME);
   ArduinoOTA.setPassword(OTA_PASSWORD);
@@ -410,6 +424,7 @@ static void setup_ota() {
     // The OTA erases ~1.2 MB of flash up front, stalling both cores for
     // seconds; the 5 s loop watchdog (main.cpp) would reboot mid-upload.
     disableLoopWDT();
+    ble_scan_pause(true);  // radio + heap are needed for the upload
     portENTER_CRITICAL(&s_mux);
     s_model.ota_active = true;
     s_model.ota_percent = 0;
@@ -427,6 +442,7 @@ static void setup_ota() {
     s_model.ota_active = false;
     portEXIT_CRITICAL(&s_mux);
     enableLoopWDT();
+    ble_scan_pause(false);
   });
   ArduinoOTA.begin();
 }
@@ -461,7 +477,8 @@ static void drop_queued_commands() {
 static void net_task(void *) {
   WiFi.mode(WIFI_STA);
   WiFi.setHostname(OTA_HOSTNAME);
-  WiFi.setSleep(false);  // modem sleep adds 100+ ms to every command
+  // WiFi/BT coexistence aborts with modem sleep fully off; MIN_MODEM costs a few ms per command.
+  WiFi.setSleep(WIFI_PS_MIN_MODEM);
   WiFi.setAutoReconnect(true);
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
 
@@ -471,7 +488,7 @@ static void net_task(void *) {
   s_mqtt.setCallback(on_message);
   s_mqtt.setBufferSize(1280);  // history payloads ~450 B, discovery ~300 B
   s_mqtt.setSocketTimeout(5);
-  s_mqtt.setKeepAlive(30);
+  s_mqtt.setKeepAlive(60);  // BLE coexistence can stall WiFi for seconds
 
   bool ota_started = false;
   unsigned long next_try = 0, next_rssi = 0, next_perf = 0, next_ldr = 0;
@@ -495,6 +512,24 @@ static void net_task(void *) {
         }
       } else {
         s_mqtt.loop();
+        // BLE presence scanner (node "cyd"): start once WiFi + MQTT have been up for a while.
+        static bool ble_started = false;
+        if (!ble_started && now > 30000) {
+          ble_started = true;
+          blepresence::setup([](const char *t, const char *p, bool r) {
+            return s_mqtt.connected() && s_mqtt.publish(t, p, r);
+          });
+        }
+        blepresence::loop();
+        // WiFi CSI sensing (same node name), 15 s after BLE so the two do not allocate together.
+        static bool csi_started = false;
+        if (!csi_started && now > 45000) {
+          csi_started = true;
+          csipresence::setup(BLE_NODE_NAME, [](const char *t, const char *p, bool r) {
+            return s_mqtt.connected() && s_mqtt.publish(t, p, r);
+          });
+        }
+        if (csi_started) csipresence::loop();
         Cmd c;
         while (xQueueReceive(s_cmd_queue, &c, 0) == pdTRUE) {
           const char *t = c.target == CmdTarget::BASIL ? TOPIC_CMD_BASIL : TOPIC_CMD_LIGHTBAR;
@@ -516,14 +551,14 @@ static void net_task(void *) {
         }
         if ((long)(now - next_perf) >= 0) {
           next_perf = now + 10000;
-          char p[128];
+          char p[192];
           portENTER_CRITICAL(&s_mux);
-          snprintf(p, sizeof(p), "{\"fps\":%.1f,\"frame_ms\":%.1f,\"flush_ms\":%.1f,\"sky_fps\":%d,\"heap\":%u}",
+          snprintf(p, sizeof(p), "{\"fps\":%.1f,\"frame_ms\":%.1f,\"flush_ms\":%.1f,\"sky_fps\":%d,\"heap\":%u,\"hmin\":0,\"hblk\":0}",
                    s_perf_fps, s_perf_frame_ms, s_perf_flush_ms, s_perf_sky, 0u);
           portEXIT_CRITICAL(&s_mux);
           // heap read outside the critical section
-          char *h = strstr(p, "\"heap\":0}");
-          if (h) snprintf(h, sizeof(p) - (h - p), "\"heap\":%u}", ESP.getFreeHeap());
+          char *h = strstr(p, "\"heap\":0,");
+          if (h) snprintf(h, sizeof(p) - (h - p), "\"heap\":%u,\"hmin\":%u,\"hblk\":%u}", ESP.getFreeHeap(), ESP.getMinFreeHeap(), ESP.getMaxAllocHeap());
           s_mqtt.publish(TOPIC_PANEL "perf", p, false);
         }
         if ((long)(now - next_rssi) >= 0) {
